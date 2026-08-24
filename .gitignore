@@ -1,0 +1,12 @@
+.venv/
+.idea/
+__pycache__/
+*.py[cod]
+db.sqlite3
+.env
+staticfiles/
+media/
+*.log
+.pytest_cache/
+.ruff_cache/
+/stich素材+html+png/
