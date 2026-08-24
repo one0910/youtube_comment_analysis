@@ -43,11 +43,11 @@
 - [x] 使用 `startproject` 建立 `config` 與 `manage.py`。
 - [x] 通過 `python manage.py check`。
 - [x] 啟動開發伺服器並看到 Django 歡迎頁。
-- [ ] 正確加入 `LocaleMiddleware`。
+- [x] 正確加入 `LocaleMiddleware`。
 - [x] 設定預設繁體中文與英文候選語言。
-- [ ] 將時區設定為 `Asia/Taipei`。
-- [ ] 理解 migration 並套用 Django 內建 migration。
-- [ ] 建立 Django Admin 帳號並登入管理頁。
+- [x] 將時區設定為 `Asia/Taipei`。
+- [x] 理解 migration 並套用 Django 內建 migration。
+- [x] 建立 Django Admin 帳號並登入管理頁。
 - [x] 建立專案 README 與 Roadmap。
 - [ ] 完成 Django 基礎階段 Commit 與 Push。
 

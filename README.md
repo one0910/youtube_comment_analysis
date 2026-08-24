@@ -122,6 +122,7 @@ python manage.py runserver
 - 先打通一條可驗證的主要流程，再增加進階功能。
 - 使用者親自執行主要開發步驟，Codex 負責說明、審查與除錯。
 - 程式碼註解使用白話中文，只解釋必要的設計原因。
+- 終端機 Python 測試採用條列步驟；需要輸出時使用 Rich 的 `rprint`。
 - 每個階段採用小步 Commit，提交前檢查 `git diff --staged`。
 - 密碼、API Key、Django Secret Key 不提交 Git。
 
