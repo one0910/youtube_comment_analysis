@@ -10,3 +10,5 @@ media/
 .pytest_cache/
 .ruff_cache/
 /stich素材+html+png/
+/node_modules/
+/static/css/app.css

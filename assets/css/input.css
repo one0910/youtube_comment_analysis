@@ -1,0 +1,16 @@
+@import "tailwindcss" source("../../");
+
+@theme {
+    --color-brand-purple: #8b5cf6;
+    --color-brand-navy: #1a1f2c;
+    --color-app-background: #fcf8f9;
+    --color-app-surface: #ffffff;
+    --color-app-border: #e5e7eb;
+
+    --font-sans:
+        "Microsoft JhengHei",
+        "Microsoft JhengHei UI",
+        "Noto Sans TC",
+        system-ui,
+        sans-serif;
+}

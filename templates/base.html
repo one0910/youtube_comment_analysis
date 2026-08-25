@@ -1,0 +1,111 @@
+{% load i18n static %} {% get_current_language as current_language %}
+<!doctype html>
+<html lang="{{ current_language }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}TubeSense AI{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}" />
+    {% block extra_head %}{% endblock %}
+  </head>
+
+  <body class="min-h-screen bg-app-background font-sans text-brand-navy antialiased">
+    {# Desktop：固定側邊欄 #}
+    <aside
+      class="fixed inset-y-0 left-0 z-40 hidden w-[280px] flex-col border-r border-app-border bg-app-surface px-6 py-7 lg:flex"
+    >
+      <a href="{% url 'analyses:overview' %}" class="inline-flex items-center gap-3" aria-label="TubeSense AI 首頁">
+        <img src="{% static 'images/tubesense-logo.svg' %}" class="size-7" alt="" />
+        <span class="text-xl font-bold tracking-tight">TubeSense AI</span>
+      </a>
+
+      <nav class="mt-10 space-y-2" aria-label="{% translate '主要導覽' %}">
+        <a
+          href="{% url 'analyses:overview' %}"
+          class="flex items-center rounded-xl bg-violet-100 px-4 py-3 font-semibold text-violet-950"
+        >
+          {% translate "分析總覽" %}
+        </a>
+
+        <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
+          {% translate "新增分析" %}
+        </span>
+
+        <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
+          {% translate "分析紀錄" %}
+        </span>
+
+        <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
+          {% translate "留言探索器" %}
+        </span>
+      </nav>
+
+      <div class="mt-auto border-t border-app-border pt-5">
+        <span class="block px-4 py-3 text-sm text-slate-400"> {% translate "系統設定" %} </span>
+      </div>
+    </aside>
+
+    {# Desktop：側邊欄右側的主要區域 #}
+    <div class="min-h-screen lg:pl-[280px]">
+      {# Mobile：頂部導覽列 #}
+      <header
+        class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-app-border bg-app-surface px-4 lg:hidden"
+      >
+        <details class="relative">
+          <summary
+            class="flex size-10 cursor-pointer list-none items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 [&::-webkit-details-marker]:hidden"
+            aria-label="{% translate '開啟導覽選單' %}"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              class="size-6"
+              aria-hidden="true"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+          </summary>
+
+          <nav
+            class="absolute left-0 top-12 w-64 space-y-2 rounded-xl border border-app-border bg-app-surface p-3 shadow-lg"
+            aria-label="{% translate '手機導覽' %}"
+          >
+            <a
+              href="{% url 'analyses:overview' %}"
+              class="block rounded-lg bg-violet-100 px-4 py-3 font-semibold text-violet-950"
+            >
+              {% translate "分析總覽" %}
+            </a>
+
+            <span class="block cursor-not-allowed px-4 py-3 text-slate-400" aria-disabled="true">
+              {% translate "新增分析" %}
+            </span>
+
+            <span class="block cursor-not-allowed px-4 py-3 text-slate-400" aria-disabled="true">
+              {% translate "分析紀錄" %}
+            </span>
+          </nav>
+        </details>
+
+        <a href="{% url 'analyses:overview' %}" class="inline-flex items-center gap-2 font-bold">
+          <img src="{% static 'images/tubesense-logo.svg' %}" class="size-6" alt="" />
+          <span>TubeSense AI</span>
+        </a>
+      </header>
+
+      {# Desktop：頁面標題列 #}
+      <header class="hidden h-18 items-center justify-between border-b border-app-border bg-app-surface px-8 lg:flex">
+        <p class="text-2xl font-semibold">{{ page_title|default:"TubeSense AI" }}</p>
+      </header>
+
+      {# Desktop 與 Mobile 共用的主要內容 #}
+      <main class="px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+        <div class="mx-auto w-full max-w-7xl">{% block content %}{% endblock %}</div>
+      </main>
+    </div>
+
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "tubesense-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "YouTube comment analysis platform built with Django, HTMX, and Tailwind CSS.",
+  "scripts": {
+    "css:watch": "tailwindcss -i ./assets/css/input.css -o ./static/css/app.css --watch",
+    "css:build": "tailwindcss -i ./assets/css/input.css -o ./static/css/app.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.5.1": true
+  }
+}

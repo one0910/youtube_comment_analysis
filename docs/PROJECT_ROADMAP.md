@@ -8,8 +8,8 @@
 
 ```text
 階段 0：專案與開發環境       已完成
-階段 1：Django 基礎          進行中  ← 目前位置
-階段 2：共用 UI 與新增分析    尚未開始
+階段 1：Django 基礎          已完成
+階段 2：共用 UI 與新增分析    進行中  ← 目前位置
 階段 3：資料模型與 Provider   尚未開始
 階段 4：YouTube 雙來源        尚未開始
 階段 5：背景任務與進度頁      尚未開始
@@ -49,7 +49,7 @@
 - [x] 理解 migration 並套用 Django 內建 migration。
 - [x] 建立 Django Admin 帳號並登入管理頁。
 - [x] 建立專案 README 與 Roadmap。
-- [ ] 完成 Django 基礎階段 Commit 與 Push。
+- [x] 完成 Django 基礎階段 Commit 與 Push。
 
 完成條件：
 
@@ -63,9 +63,10 @@
 
 目標：把 Stitch 的 Desktop／Mobile 設計整理成同一套 Django Template RWD 介面，完成頁面 1、2。
 
-- [ ] 建立共用 `base.html`、側邊導覽、手機頂部列與 Logo。
-- [ ] 將品牌統一為 TubeSense AI，使用紫色播放圖示。
-- [ ] 建立靜態檔案與 Tailwind CSS 開發流程。
+- [x] 建立 `analyses` Django App，作為分析功能的程式邊界。
+- [x] 建立共用 `base.html`、側邊導覽、手機頂部列與 Logo。
+- [x] 將品牌統一為 TubeSense AI，使用紫色播放圖示。
+- [x] 建立靜態檔案與 Tailwind CSS 開發流程。
 - [ ] 完成頁面 1「分析總覽」極簡版。
 - [ ] 完成頁面 2「新增分析」單一步驟表單。
 - [ ] 使用後端驗證支援 watch、youtu.be、shorts、live 等 YouTube 網址。
@@ -84,7 +85,6 @@
 
 目標：先定義資料和邊界，再實作 Selenium／API，避免抓取邏輯和網站流程綁死。
 
-- [ ] 建立 `analyses` Django App。
 - [ ] 設計 `Video`、`Comment`、`AnalysisJob`、`FetchRun` 模型。
 - [ ] 設計 `CommentObservation`，記錄每次抓取看到的留言。
 - [ ] 設計 `JobLog` 與 `AnalysisResult`。
