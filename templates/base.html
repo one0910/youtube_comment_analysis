@@ -20,16 +20,23 @@
       </a>
 
       <nav class="mt-10 space-y-2" aria-label="{% translate '主要導覽' %}">
-        <a
-          href="{% url 'analyses:overview' %}"
-          class="flex items-center rounded-xl bg-violet-100 px-4 py-3 font-semibold text-violet-950"
-        >
-          {% translate "分析總覽" %}
+        <a href="{% url 'analyses:overview' %}" 
+          class="flex items-center rounded-xl px-4 py-3 transition 
+                {% if request.resolver_match.url_name == 'overview' %}
+              bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
+                {% endif %}" 
+          {% if request.resolver_match.url_name == 'overview' %} aria-current="page" {% endif %}>
+            {% translate "分析總覽" %}
         </a>
 
-        <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
-          {% translate "新增分析" %}
-        </span>
+        <a href="{% url 'analyses:new_analysis' %}" 
+          class="flex items-center rounded-xl px-4 py-3 transition 
+                {% if request.resolver_match.url_name == 'new_analysis' %}
+              bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
+                {% endif %}" 
+          {% if request.resolver_match.url_name == 'new_analysis' %} aria-current="page" {% endif %}>
+            {% translate "新增分析" %}
+        </a>
 
         <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
           {% translate "分析紀錄" %}
@@ -49,11 +56,13 @@
     <div class="min-h-screen lg:pl-[280px]">
       {# Mobile：頂部導覽列 #}
       <header
-        class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-app-border bg-app-surface px-4 lg:hidden"
+        class="sticky top-0 z-30 flex h-16 items-center justify-between border-b 
+        border-app-border bg-app-surface px-4 lg:hidden"
       >
         <details class="relative">
           <summary
-            class="flex size-10 cursor-pointer list-none items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 [&::-webkit-details-marker]:hidden"
+            class="flex size-10 cursor-pointer list-none items-center justify-center rounded-lg 
+            text-slate-600 hover:bg-slate-100 [&::-webkit-details-marker]:hidden"
             aria-label="{% translate '開啟導覽選單' %}"
           >
             <svg
@@ -72,16 +81,23 @@
             class="absolute left-0 top-12 w-64 space-y-2 rounded-xl border border-app-border bg-app-surface p-3 shadow-lg"
             aria-label="{% translate '手機導覽' %}"
           >
-            <a
-              href="{% url 'analyses:overview' %}"
-              class="block rounded-lg bg-violet-100 px-4 py-3 font-semibold text-violet-950"
-            >
-              {% translate "分析總覽" %}
+            <a href="{% url 'analyses:overview' %}" 
+            class="block rounded-lg px-4 py-3 transition 
+                  {% if request.resolver_match.url_name == 'overview' %}
+                  bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
+                  {% endif %}" 
+            {% if request.resolver_match.url_name == 'overview' %} aria-current="page" {% endif %}>
+                {% translate "分析總覽" %}
             </a>
 
-            <span class="block cursor-not-allowed px-4 py-3 text-slate-400" aria-disabled="true">
+          <a href="{% url 'analyses:new_analysis' %}" 
+          class="block rounded-lg px-4 py-3 transition 
+                {% if request.resolver_match.url_name == 'new_analysis' %}
+              bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
+                {% endif %}" 
+          {% if request.resolver_match.url_name == 'new_analysis' %} aria-current="page" {% endif %}>
               {% translate "新增分析" %}
-            </span>
+          </a>
 
             <span class="block cursor-not-allowed px-4 py-3 text-slate-400" aria-disabled="true">
               {% translate "分析紀錄" %}

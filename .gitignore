@@ -12,3 +12,5 @@ media/
 /stich素材+html+png/
 /node_modules/
 /static/css/app.css
+/.vscode/settings.json
+/local_debug
