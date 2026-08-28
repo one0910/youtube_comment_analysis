@@ -1,0 +1,20 @@
+{% load i18n %}
+
+<article class="mt-6 flex min-h-80 flex-col items-center justify-center rounded-xl border border-red-200 bg-white px-6 py-10 text-center shadow-sm" role="alert" aria-labelledby="video-preview-error-title">
+    <div class="flex size-20 items-center justify-center rounded-full bg-red-100 text-red-700">
+        <svg class="size-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M14.5 10.5L19 8v8l-4.5-2.5"></path>
+            <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h6A2.5 2.5 0 0 1 15 6.5v7"></path>
+            <path d="M3 3l18 18"></path>
+            <path d="M5 5l10 10"></path>
+        </svg>
+    </div>
+
+    <h2 id="video-preview-error-title" class="mt-6 text-2xl font-bold text-brand-navy">{{ video_preview_error.error_title }}</h2>
+
+    <p class="mt-3 max-w-xl text-base leading-7 text-slate-600">{{ video_preview_error.error_message }}</p>
+
+    <a href="{% url 'analyses:new_analysis' %}" class="mt-6 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-navy px-6 py-3 font-semibold text-white transition hover:bg-slate-800">
+        {% translate "重新輸入" %}
+    </a>
+</article>

@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from .providers.youtube_provider import (
     YouTubeVideoPreviewData,
+    YouTubeVideoUnavailableError,
 )
 
 from django.test import SimpleTestCase,TestCase #TestCase：每個測試之間隔離資料庫資料。
@@ -87,6 +88,45 @@ class NewAnalysisViewTests(TestCase):
         self.assertContains(response,"測試頻道")
 
         mock_get_video_preview_with_selenium.assert_called_once_with(youtube_video_id="dQw4w9WgXcQ")
+
+    @patch("analyses.views.get_video_preview_with_selenium")
+    def test_unavailable_youtube_video_renders_error_card(
+        self,
+        mock_get_video_preview_with_selenium,
+    ):
+        """YouTube 回覆影片不可用時，應顯示錯誤卡片而不是 500。"""
+        mock_get_video_preview_with_selenium.side_effect = (
+            YouTubeVideoUnavailableError(
+                provider_status="ERROR",
+                provider_reason="無法播放影片",
+            )
+        )
+
+        response = self.client.post(
+            reverse("analyses:new_analysis"),
+            {"input_video_url": "https://www.youtube.com/watch?v=SbE675HRAIa"},
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["video_preview_data"])
+        self.assertIsNotNone(response.context["video_preview_error"])
+        self.assertContains(response, "找不到影片或影片無法存取")
+        self.assertContains(response, "重新輸入")
+
+    def test_htmx_invalid_url_returns_only_video_check_panel(self):
+        """HTMX 驗證失敗時，只回傳表單區域及欄位錯誤。"""
+
+        response = self.client.post(
+            reverse("analyses:new_analysis"),
+            {"input_video_url": "https://example.com/video/123"},
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response,"analyses/partials/video_check_panel.html")
+        self.assertNotContains(response,"<!doctype html>")
+        self.assertContains( response,"請輸入支援的 YouTube 影片網址。")
 
 
 

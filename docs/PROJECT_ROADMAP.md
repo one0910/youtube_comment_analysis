@@ -70,7 +70,7 @@
 - [x] 完成頁面 1「分析總覽」極簡版。
 - [x] 完成頁面 2「新增分析」單一步驟表單。
 - [x] 使用後端驗證支援 watch、youtu.be、shorts、live 等 YouTube 網址。
-- [ ] 使用 HTMX 在輸入網址後顯示影片預覽或錯誤。
+- [x] 使用 HTMX 在輸入網址後顯示影片預覽或錯誤。
 - [ ] 加入 Selenium／YouTube API 資料來源選擇。
 - [x] 驗證 Desktop 與 Mobile 不跑版。
 - [x] Template 文字使用可翻譯標記，為中英文切換保留能力。

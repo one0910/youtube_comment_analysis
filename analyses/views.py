@@ -7,6 +7,9 @@ from django.utils.translation import gettext as _
 from .services.youtube_video_preview_service import (
     get_video_preview_with_selenium,
 )
+from .providers.youtube_provider import (
+    YouTubeVideoUnavailableError,
+)
 
 def overview(request: HttpRequest) -> HttpResponse:
     """顯示 TubeSense AI 分析總覽。"""
@@ -46,11 +49,25 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
     validated_input_video_url = None
     youtube_video_id = None
     video_preview_data = None
+    video_preview_error = None
 
     if request.method == "POST" and form.is_valid(): #執行form.is_valid()時就會呼叫NewAnalysisForm.clean()
         validated_input_video_url = form.cleaned_data["input_video_url"]
         youtube_video_id = form.cleaned_data["youtube_video_id"]
-        video_preview_data = (get_video_preview_with_selenium(youtube_video_id=youtube_video_id))
+        try:
+            video_preview_data = get_video_preview_with_selenium(youtube_video_id=youtube_video_id)
+        except YouTubeVideoUnavailableError:
+            # 網址格式正確，但影片不存在、已刪除、私人或無法存取。
+            form.add_error("input_video_url", _("無法取得這部 YouTube 影片。"))
+
+            video_preview_error = {
+                "error_code": "video_unavailable",
+                "error_title": _("找不到影片或影片無法存取"),
+                "error_message": _(
+                    "無法取得這部影片的公開資訊。"
+                    "請確認網址正確，且影片為公開、可觀看狀態。"
+                ),
+            }
 
     context = {
         "page_title": _("新增分析"),
@@ -58,5 +75,10 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
         "validated_input_video_url": validated_input_video_url,
         "youtube_video_id": youtube_video_id,
         "video_preview_data": video_preview_data,
+        "video_preview_error": video_preview_error,
     }
-    return render(request, "analyses/new_analysis.html", context)
+    # HTMX 只需要表單區域；一般瀏覽器請求仍回傳完整頁面。
+    if request.headers.get("HX-Request") == "true":
+        return render(request,"analyses/partials/video_check_panel.html", context)
+
+    return render(request,"analyses/new_analysis.html",context)

@@ -14,6 +14,24 @@ class YouTubeVideoPreviewData:
     video_comment_count: int | None
 
 
+class YouTubeVideoUnavailableError(Exception):
+    """YouTube 回覆影片目前無法公開存取。"""
+
+    def __init__(
+        self,
+        provider_status: str,
+        provider_reason: str | None = None,
+    ):
+        self.provider_status = provider_status
+        self.provider_reason = provider_reason
+
+        error_message = (
+            provider_reason
+            or f"YouTube playability status: {provider_status}"
+        )
+
+        super().__init__(error_message)
+
 class YouTubeProvider(ABC):
     """所有 YouTube 資料來源都必須遵守的共同介面。"""
 

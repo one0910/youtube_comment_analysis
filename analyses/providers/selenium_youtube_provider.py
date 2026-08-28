@@ -14,10 +14,12 @@ from .selenium_driver_factory import create_local_chrome_driver
 from .youtube_provider import (
     YouTubeProvider,
     YouTubeVideoPreviewData,
+    YouTubeVideoUnavailableError,
 )
 
 
 VIDEO_INFORMATION_WAIT_SECONDS = 20
+YOUTUBE_PLAYABILITY_OK_STATUS = "OK"
 
 VIDEO_TITLE_SELECTOR = 'meta[property="og:title"]'
 VIDEO_AUTHOR_SELECTOR = (
@@ -34,6 +36,28 @@ COMMENT_SECTION_SCROLL_ATTEMPTS = 30
 COMMENT_SECTION_SCROLL_DISTANCE = 1200
 COMMENT_SECTION_SCROLL_DELAY_SECONDS = 0.5
 
+
+def check_youtube_video_is_available(chrome_driver: WebDriver, wait: WebDriverWait) -> None:
+    """讀取 YouTube 播放狀態，確認影片是否可以公開存取。"""
+
+    video_playability_data = wait.until(
+        lambda current_driver: current_driver.execute_script(
+            """
+            const playabilityStatus = window.ytInitialPlayerResponse?.playabilityStatus;
+            if (!playabilityStatus?.status) {return null}
+            return {
+                provider_status: playabilityStatus.status,
+                provider_reason: playabilityStatus.reason || null,
+            };
+            """
+        )
+    )
+
+    provider_status = video_playability_data["provider_status"]
+    provider_reason = video_playability_data.get("provider_reason")
+
+    if provider_status != YOUTUBE_PLAYABILITY_OK_STATUS:
+        raise YouTubeVideoUnavailableError(provider_status=provider_status,provider_reason=provider_reason)
 
 """等待指定元素出現，並取得不能為空的 HTML Attribute。"""
 def get_required_element_attribute(wait: WebDriverWait,css_selector: str, attribute_name: str) -> str:
@@ -54,9 +78,7 @@ def get_video_view_count( chrome_driver: WebDriver, wait: WebDriverWait) -> int:
         lambda current_driver: (
             current_driver.execute_script(
                 """
-                return window.ytInitialPlayerResponse
-                    ?.videoDetails
-                    ?.viewCount || null;
+                return window.ytInitialPlayerResponse?.videoDetails?.viewCount || null;
                 """
             )
         )
@@ -96,6 +118,8 @@ class SeleniumYouTubeProvider(YouTubeProvider):
         try:
             chrome_driver.get(youtube_video_url)
             wait = WebDriverWait(chrome_driver,VIDEO_INFORMATION_WAIT_SECONDS)
+
+            check_youtube_video_is_available(chrome_driver=chrome_driver, wait=wait)
 
             video_title = get_required_element_attribute(
                 wait=wait,

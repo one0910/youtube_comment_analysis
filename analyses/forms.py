@@ -15,7 +15,7 @@ class NewAnalysisForm(forms.Form):
         help_text=_("請貼上公開的 YouTube 影片網址。"),
         widget=forms.URLInput( #顯示層：產生 <input type="url">，也就是widget 和 attrs 主要負責「HTML 怎麼產生」，
             attrs={
-                "class": "mt-2 block w-full rounded-xl border border-app-border bg-white px-4 py-3 text-base text-brand-navy outline-none transition placeholder:text-slate-400 focus:border-brand-purple focus:ring-2 focus:ring-violet-200",
+                "class": "mt-2 block w-full rounded-xl border border-app-border bg-white px-4 py-3 text-base text-brand-navy outline-none transition placeholder:text-slate-400 focus:border-brand-purple focus:ring-2 focus:ring-violet-200 aria-invalid:border-red-600 aria-invalid:bg-red-50 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-200",
                 "placeholder": "https://www.youtube.com/watch?v=...",
                 "autocomplete": "url",
             }
@@ -48,10 +48,7 @@ class NewAnalysisForm(forms.Form):
       except InvalidYouTubeUrlError:
           self.add_error(
               "input_video_url",
-              ValidationError(
-                  _("請輸入支援的 YouTube 影片網址。"),
-                  code="invalid_youtube_url",
-              ),
+              ValidationError(_("請輸入支援的 YouTube 影片網址。"),code="invalid_youtube_url"),
           )
       else:
           validated_form_data["youtube_video_id"] = youtube_video_id

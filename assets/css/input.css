@@ -14,3 +14,90 @@
         system-ui,
         sans-serif;
 }
+
+@keyframes tubesense-loading-ring {
+    0% {
+        opacity: 0.5;
+        transform: scale(0.8);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(1.5);
+    }
+}
+
+@keyframes tubesense-loading-dot {
+    0%,
+    100% {
+        opacity: 0.2;
+    }
+
+    20% {
+        opacity: 1;
+    }
+}
+
+@keyframes tubesense-loading-progress {
+    0% {
+        left: -33%;
+        width: 33%;
+    }
+
+    50% {
+        left: 33%;
+        width: 66%;
+    }
+
+    100% {
+        left: 100%;
+        width: 33%;
+    }
+}
+
+.tubesense-htmx-indicator {
+    display: none;
+}
+
+.tubesense-htmx-indicator.htmx-request {
+    display: flex;
+}
+
+.tubesense-loading-ring::before {
+    animation: tubesense-loading-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    border: 2px solid #8b5cf6;
+    border-radius: 9999px;
+    content: "";
+    inset: -8px;
+    position: absolute;
+}
+
+.tubesense-loading-dot {
+    animation: tubesense-loading-dot 1.4s infinite both;
+}
+
+.tubesense-loading-dot:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.tubesense-loading-dot:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+.tubesense-loading-progress {
+    animation: tubesense-loading-progress 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tubesense-loading-ring::before,
+    .tubesense-loading-dot,
+    .tubesense-loading-progress {
+        animation: none;
+    }
+
+    .tubesense-loading-progress {
+        left: 0;
+        opacity: 0.5;
+        width: 100%;
+    }
+}
