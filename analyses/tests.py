@@ -21,6 +21,15 @@ from .services.youtube_count_parser import (
     InvalidYouTubeCountTextError,
     convert_youtube_count_text_to_integer,
 )
+
+from .services.youtube_video_storage_service import (
+    save_or_update_video_from_preview_data,
+)
+
+from .services.analysis_job_creation_service import (
+    create_pending_analysis_job_for_video,
+)
+
 from .providers.selenium_youtube_provider import (
     get_video_comment_count,
 )
@@ -128,9 +137,9 @@ class NewAnalysisViewTests(TestCase):
         self.assertTrue(response.context["form"].errors)
         self.assertIsNone(response.context["validated_input_video_url"])
 
+    """有效 YouTube 網址應取得並傳入影片預覽資料。"""
     @patch("analyses.views.get_video_preview_with_selenium")
     def test_new_analysis_form_accepts_supported_youtube_url(self,mock_get_video_preview_with_selenium):
-        """有效 YouTube 網址應取得並傳入影片預覽資料。"""
 
         input_video_url = ("https://www.youtube.com/watch""?v=dQw4w9WgXcQ")
         expected_video_preview_data = YouTubeVideoPreviewData(
@@ -158,15 +167,25 @@ class NewAnalysisViewTests(TestCase):
         self.assertEqual(response.context["video_preview_data"],expected_video_preview_data,)
         self.assertContains(response,"測試影片標題")
         self.assertContains(response,"測試頻道")
+        saved_video_record = response.context["saved_video_record"]
+
+        self.assertIsNotNone(saved_video_record)
+        self.assertEqual(Video.objects.count(), 1)
+        self.assertEqual(saved_video_record.youtube_video_id,"dQw4w9WgXcQ")
+        self.assertEqual(saved_video_record.video_title,"測試影片標題")
+        self.assertEqual(saved_video_record.video_author_name,"測試頻道")
+        self.assertEqual(saved_video_record.video_view_count,123_456)
+        self.assertEqual(saved_video_record.video_comment_count,789)
+        self.assertContains(response, "開始分析留言")
+        self.assertContains(response, reverse("analyses:start_analysis", args=[saved_video_record.id]))
 
         mock_get_video_preview_with_selenium.assert_called_once_with(youtube_video_id="dQw4w9WgXcQ")
 
+
+    """YouTube 回覆影片不可用時，應顯示錯誤卡片而不是 500。"""
     @patch("analyses.views.get_video_preview_with_selenium")
-    def test_unavailable_youtube_video_renders_error_card(
-        self,
-        mock_get_video_preview_with_selenium,
-    ):
-        """YouTube 回覆影片不可用時，應顯示錯誤卡片而不是 500。"""
+    def test_unavailable_youtube_video_renders_error_card(self,mock_get_video_preview_with_selenium):
+        
         mock_get_video_preview_with_selenium.side_effect = (
             YouTubeVideoUnavailableError(
                 provider_status="ERROR",
@@ -185,9 +204,10 @@ class NewAnalysisViewTests(TestCase):
         self.assertIsNotNone(response.context["video_preview_error"])
         self.assertContains(response, "找不到影片或影片無法存取")
         self.assertContains(response, "重新輸入")
+        self.assertNotContains(response, "開始分析留言")
 
+    """HTMX 驗證失敗時，只回傳表單區域及欄位錯誤。"""
     def test_htmx_invalid_url_returns_only_video_check_panel(self):
-        """HTMX 驗證失敗時，只回傳表單區域及欄位錯誤。"""
 
         response = self.client.post(
             reverse("analyses:new_analysis"),
@@ -312,3 +332,127 @@ class YouTubeUrlParserTests(SimpleTestCase):
             with self.subTest(input_video_url=input_video_url):
                 with self.assertRaises(InvalidYouTubeUrlError):
                     get_video_id_from_youtube_url(input_video_url)
+
+"""測試影片預覽資料寫入資料庫的邏輯。"""
+class YouTubeVideoStorageServiceTests(TestCase):
+    
+    """第一次取得影片預覽時，應建立一筆 Video。"""
+    def test_new_preview_data_creates_video_record(self):
+
+        video_preview_data = YouTubeVideoPreviewData(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="第一次取得的影片標題",
+            video_author_name="測試頻道",
+            video_thumbnail_url=(
+                "https://i.ytimg.com/vi/"
+                "dQw4w9WgXcQ/hqdefault.jpg"
+            ),
+            video_view_count=123_456,
+            video_comment_count=789,
+        )
+
+        saved_video_record = save_or_update_video_from_preview_data(video_preview_data=video_preview_data)
+
+        self.assertEqual(Video.objects.count(), 1)
+        self.assertEqual(saved_video_record.youtube_video_id,"dQw4w9WgXcQ")
+        self.assertEqual(saved_video_record.video_title,"第一次取得的影片標題")
+        self.assertEqual(saved_video_record.video_view_count,123_456)
+
+    """再次取得同一支影片時，應更新原資料而不是新增第二筆。"""
+    def test_existing_video_is_updated_instead_of_duplicated(self):
+        
+        existing_video_record = Video.objects.create(youtube_video_id="dQw4w9WgXcQ",video_title="舊的影片標題")
+
+        updated_video_preview_data = YouTubeVideoPreviewData(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="更新後的影片標題",
+            video_author_name="更新後的頻道",
+            video_thumbnail_url=(
+                "https://i.ytimg.com/vi/"
+                "dQw4w9WgXcQ/maxresdefault.jpg"
+            ),
+            video_view_count=999_999,
+            video_comment_count=1_234,
+        )
+
+        saved_video_record = save_or_update_video_from_preview_data(video_preview_data=updated_video_preview_data)
+        existing_video_record.refresh_from_db()
+
+        self.assertEqual(Video.objects.count(), 1)
+        self.assertEqual(saved_video_record.id,existing_video_record.id)
+        self.assertEqual(existing_video_record.video_title, "更新後的影片標題")
+        self.assertEqual(existing_video_record.video_comment_count,1_234)
+
+
+"""測試建立分析任務的 Service。"""
+class AnalysisJobCreationServiceTests(TestCase):
+
+    """每個測試開始前先建立一支影片。"""
+    def setUp(self):
+        self.video_record = Video.objects.create(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="準備分析的影片"
+          )
+
+    """開始分析時，應建立一個等待處理的任務。"""
+    def test_creates_pending_analysis_job_for_video(self):
+
+        created_analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record)
+
+        self.assertEqual(AnalysisJob.objects.count(), 1)
+        self.assertEqual(created_analysis_job.video, self.video_record)
+        self.assertEqual(created_analysis_job.data_source,AnalysisJob.DataSource.SELENIUM)
+        self.assertEqual(created_analysis_job.status,AnalysisJob.Status.PENDING)
+        self.assertEqual(created_analysis_job.progress_percentage,0)
+
+    """同一支影片可以在不同時間建立多個分析任務。"""
+    def test_each_analysis_request_creates_a_separate_job(self):
+
+        first_analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record)
+        second_analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record) 
+
+        self.assertEqual(AnalysisJob.objects.count(), 2)
+        self.assertNotEqual(first_analysis_job.id, second_analysis_job.id)
+
+
+"""測試從網站建立分析任務的流程。"""
+class AnalysisJobStartViewTests(TestCase):
+
+    def setUp(self):
+        self.video_record = Video.objects.create(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="準備分析的影片",
+        )
+
+    def test_post_creates_job_and_redirects_to_job_page(self):
+        """POST 開始分析後，應建立任務並導向任務頁。"""
+
+        response = self.client.post(reverse("analyses:start_analysis", args=[self.video_record.id]))
+        created_analysis_job = AnalysisJob.objects.get()
+
+        self.assertEqual(AnalysisJob.objects.count(), 1)
+        self.assertEqual(created_analysis_job.video,self.video_record)
+        self.assertRedirects(
+            response,
+            reverse("analyses:analysis_job_detail",args=[created_analysis_job.id]),
+        )
+
+    """GET 不可建立任務，必須回傳 405。"""
+    def test_get_does_not_create_analysis_job(self):
+        response = self.client.get(reverse("analyses:start_analysis",args=[self.video_record.id]))
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(AnalysisJob.objects.count(), 0)
+
+
+    """任務頁應顯示影片、狀態與進度。"""
+    def test_analysis_job_detail_page_displays_job(self):
+        analysis_job = AnalysisJob.objects.create(video=self.video_record)
+        response = self.client.get(reverse("analyses:analysis_job_detail",args=[analysis_job.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response,"analyses/analysis_job_detail.html")
+        self.assertEqual(response.context["analysis_job"],analysis_job)
+        self.assertContains(response, "準備分析的影片")
+        self.assertContains(response, "等待處理")
+        self.assertContains(response, "0%")
