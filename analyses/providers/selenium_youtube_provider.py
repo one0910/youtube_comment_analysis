@@ -7,6 +7,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from analyses.services.youtube_count_parser import (
+    InvalidYouTubeCountTextError,
     convert_youtube_count_text_to_integer,
 )
 
@@ -90,14 +91,22 @@ def get_video_view_count( chrome_driver: WebDriver, wait: WebDriverWait) -> int:
 """捲動到留言區並取得留言總數；找不到時回傳 None。"""
 def get_video_comment_count(chrome_driver: WebDriver) -> int | None:
 
-    for scroll_attempt in range(COMMENT_SECTION_SCROLL_ATTEMPTS):
+    for _ in range(COMMENT_SECTION_SCROLL_ATTEMPTS):
         comment_count_elements = chrome_driver.find_elements( By.CSS_SELECTOR, VIDEO_COMMENT_COUNT_SELECTOR)
 
         for comment_count_element in comment_count_elements:
-            video_comment_count_text = (comment_count_element.text.strip())
+            video_comment_count_text = comment_count_element.text.strip()
 
-            if video_comment_count_text:
+            # 元素已經出現，但文字仍是空白，代表資料尚未載入完成。
+            if not video_comment_count_text:
+                continue
+
+            try:
                 return convert_youtube_count_text_to_integer(video_comment_count_text)
+            except InvalidYouTubeCountTextError:
+                # YouTube 可能先顯示「留言」或「Comments」，
+                # 數字會在稍後由 JavaScript 動態填入，因此繼續等待。
+                continue
 
         chrome_driver.execute_script(("window.scrollBy("f"0, {COMMENT_SECTION_SCROLL_DISTANCE}"");") )
         sleep(COMMENT_SECTION_SCROLL_DELAY_SECONDS)

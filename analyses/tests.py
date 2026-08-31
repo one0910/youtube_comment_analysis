@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from .providers.youtube_provider import (
     YouTubeVideoPreviewData,
@@ -15,6 +15,9 @@ from .services.youtube_url_parser import (
 from .services.youtube_count_parser import (
     InvalidYouTubeCountTextError,
     convert_youtube_count_text_to_integer,
+)
+from .providers.selenium_youtube_provider import (
+    get_video_comment_count,
 )
 
 """分析總覽頁面的基本測試。"""
@@ -151,6 +154,34 @@ class NewAnalysisFormValidationTests(SimpleTestCase):
             "input_video_url",
             form.errors,
         )
+
+class SeleniumYouTubeCommentCountTests(SimpleTestCase):
+    """測試 Selenium 等待 YouTube 動態載入留言數。"""
+
+    @patch("analyses.providers.selenium_youtube_provider.sleep")
+    def test_waits_until_comment_count_contains_number(self, mock_sleep):
+        """只有「留言」時應繼續等待，直到取得完整數量。"""
+
+        comment_label_element = MagicMock()
+        comment_label_element.text = "留言"
+
+        loaded_comment_count_element = MagicMock()
+        loaded_comment_count_element.text = "2,313 則留言"
+
+        chrome_driver = MagicMock()
+
+        # 第一次只有「留言」，第二次才出現完整數字。
+        chrome_driver.find_elements.side_effect = [
+            [comment_label_element],
+            [loaded_comment_count_element],
+        ]
+
+        actual_comment_count = get_video_comment_count(chrome_driver=chrome_driver)
+
+        self.assertEqual(actual_comment_count, 2_313)
+        self.assertEqual(chrome_driver.find_elements.call_count,2)
+        mock_sleep.assert_called_once()
+
 
 class YouTubeCountParserTests(SimpleTestCase):
     """測試 YouTube 顯示數量的文字轉換。"""
