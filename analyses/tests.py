@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 
 from .forms import NewAnalysisForm
-from .models import AnalysisJob, Video
+from .models import AnalysisJob, FetchRun, Video
 from .services.youtube_url_parser import (
     InvalidYouTubeUrlError,
     get_video_id_from_youtube_url,
@@ -387,32 +387,55 @@ class YouTubeVideoStorageServiceTests(TestCase):
 """測試建立分析任務的 Service。"""
 class AnalysisJobCreationServiceTests(TestCase):
 
-    """每個測試開始前先建立一支影片。"""
     def setUp(self):
         self.video_record = Video.objects.create(
             youtube_video_id="dQw4w9WgXcQ",
-            video_title="準備分析的影片"
-          )
+            video_title="準備分析的影片",
+        )
 
-    """開始分析時，應建立一個等待處理的任務。"""
-    def test_creates_pending_analysis_job_for_video(self):
+    """建立任務時，應同時建立第一次抓取紀錄。"""
+    def test_creates_pending_analysis_job_and_first_fetch_run(self):
 
         created_analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record)
+        created_fetch_run = created_analysis_job.fetch_runs.get()
 
         self.assertEqual(AnalysisJob.objects.count(), 1)
+        self.assertEqual(FetchRun.objects.count(), 1)
         self.assertEqual(created_analysis_job.video, self.video_record)
-        self.assertEqual(created_analysis_job.data_source,AnalysisJob.DataSource.SELENIUM)
-        self.assertEqual(created_analysis_job.status,AnalysisJob.Status.PENDING)
-        self.assertEqual(created_analysis_job.progress_percentage,0)
+        self.assertEqual(created_analysis_job.data_source, AnalysisJob.DataSource.SELENIUM)
+        self.assertEqual(created_analysis_job.status, AnalysisJob.Status.PENDING)
+        self.assertEqual(created_analysis_job.progress_percentage, 0)
+        self.assertEqual(created_fetch_run.analysis_job, created_analysis_job)
+        self.assertEqual(created_fetch_run.data_source, AnalysisJob.DataSource.SELENIUM)
+        self.assertEqual(created_fetch_run.status, FetchRun.Status.PENDING)
+        self.assertEqual(created_fetch_run.attempt_number, 1)
+        self.assertEqual(created_fetch_run.fetched_comment_count, 0)
 
-    """同一支影片可以在不同時間建立多個分析任務。"""
-    def test_each_analysis_request_creates_a_separate_job(self):
+    """每次分析請求都應建立獨立任務與抓取紀錄。"""
+    def test_each_analysis_request_creates_separate_job_and_fetch_run(self):
 
         first_analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record)
-        second_analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record) 
+        second_analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record)
 
         self.assertEqual(AnalysisJob.objects.count(), 2)
+        self.assertEqual(FetchRun.objects.count(), 2)
         self.assertNotEqual(first_analysis_job.id, second_analysis_job.id)
+        self.assertEqual(first_analysis_job.fetch_runs.get().attempt_number, 1)
+        self.assertEqual(second_analysis_job.fetch_runs.get().attempt_number, 1)
+
+    """FetchRun 建立失敗時，不可留下不完整的 AnalysisJob。"""
+    @patch(
+        "analyses.services.analysis_job_creation_service."
+        "FetchRun.objects.create"
+    )
+    def test_analysis_job_is_rolled_back_when_fetch_run_creation_fails(self,mock_fetch_run_create):
+
+        mock_fetch_run_create.side_effect = IntegrityError("模擬 FetchRun 建立失敗")
+        with self.assertRaises(IntegrityError):
+            create_pending_analysis_job_for_video(video_record=self.video_record)
+
+        self.assertEqual(AnalysisJob.objects.count(), 0)
+        self.assertEqual(FetchRun.objects.count(), 0)
 
 
 """測試從網站建立分析任務的流程。"""
@@ -456,3 +479,81 @@ class AnalysisJobStartViewTests(TestCase):
         self.assertContains(response, "準備分析的影片")
         self.assertContains(response, "等待處理")
         self.assertContains(response, "0%")
+
+"""測試留言抓取紀錄的資料庫規則。"""
+class FetchRunModelTests(TestCase):
+
+    def setUp(self):
+        self.video_record = Video.objects.create(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="準備抓取留言的影片",
+        )
+
+        self.analysis_job = AnalysisJob.objects.create(video=self.video_record)
+            
+        
+
+    """新抓取紀錄應為等待處理、第一次抓取及零留言。"""
+    def test_fetch_run_uses_expected_defaults(self):
+
+        fetch_run = FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+        )
+
+        self.assertIsInstance(fetch_run.id, uuid.UUID)
+        self.assertEqual(fetch_run.status, FetchRun.Status.PENDING)
+        self.assertEqual(fetch_run.attempt_number, 1)
+        self.assertEqual(fetch_run.fetched_comment_count, 0)
+        self.assertEqual(fetch_run.error_code, "")
+        self.assertEqual(fetch_run.error_message, "")
+
+    def test_analysis_job_can_find_related_fetch_runs(self):
+        """AnalysisJob 應能找到它的所有抓取紀錄。"""
+
+        fetch_run = FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+        )
+
+        self.assertTrue(self.analysis_job.fetch_runs.filter(id=fetch_run.id).exists())
+        self.assertEqual(fetch_run.analysis_job, self.analysis_job)
+
+    """同一任務不可建立兩筆相同抓取次數的紀錄。"""
+    def test_same_job_cannot_have_duplicate_attempt_number(self):
+
+        FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+            attempt_number=1,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                FetchRun.objects.create(
+                    analysis_job=self.analysis_job,
+                    data_source=AnalysisJob.DataSource.SELENIUM,
+                    attempt_number=1,
+                )
+
+    """抓取次數不可使用零。"""
+    def test_attempt_number_must_start_from_one(self):
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                FetchRun.objects.create(
+                    analysis_job=self.analysis_job,
+                    data_source=AnalysisJob.DataSource.SELENIUM,
+                    attempt_number=0,
+                )
+
+    """刪除分析任務時，所屬抓取紀錄也應一起刪除。"""
+    def test_deleting_analysis_job_also_deletes_fetch_runs(self):
+
+        FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+        )
+
+        self.analysis_job.delete()
+        self.assertEqual(FetchRun.objects.count(), 0)

@@ -165,3 +165,111 @@ class AnalysisJob(models.Model):
             f"{self.video.video_title} - "
             f"{self.get_status_display()}"
         )
+
+
+"""保存一次 YouTube 留言資料抓取的執行紀錄。"""
+class FetchRun(models.Model):
+
+    class Status(models.TextChoices):
+        """留言抓取目前的執行狀態。"""
+
+        PENDING = "pending", gettext_lazy("等待處理")
+        RUNNING = "running", gettext_lazy("抓取中")
+        COMPLETED = "completed", gettext_lazy("抓取完成")
+        FAILED = "failed", gettext_lazy("抓取失敗")
+        CANCELLED = "cancelled", gettext_lazy("已取消")
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name=gettext_lazy("抓取紀錄 ID"),
+    )
+
+    analysis_job = models.ForeignKey(
+        AnalysisJob,
+        on_delete=models.CASCADE,
+        related_name="fetch_runs",
+        verbose_name=gettext_lazy("分析任務"),
+    )
+
+    data_source = models.CharField(
+        max_length=20,
+        choices=AnalysisJob.DataSource.choices,
+        verbose_name=gettext_lazy("資料來源"),
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+        verbose_name=gettext_lazy("抓取狀態"),
+    )
+
+    attempt_number = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name=gettext_lazy("第幾次抓取"),
+    )
+
+    fetched_comment_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name=gettext_lazy("已取得留言數"),
+    )
+
+    error_code = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name=gettext_lazy("錯誤代碼"),
+    )
+
+    error_message = models.TextField(
+        blank=True,
+        verbose_name=gettext_lazy("錯誤訊息"),
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=gettext_lazy("建立時間"),
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=gettext_lazy("更新時間"),
+    )
+
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("開始時間"),
+    )
+
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("完成時間"),
+    )
+
+    class Meta:
+        verbose_name = gettext_lazy("留言抓取紀錄")
+        verbose_name_plural = gettext_lazy("留言抓取紀錄")
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["analysis_job","attempt_number"],
+                name="unique_fetch_attempt_per_analysis_job",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(attempt_number__gte=1),
+                name="fetch_run_attempt_number_gte_1",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        """顯示任務、抓取次數與目前狀態。"""
+
+        return (
+            f"{self.analysis_job_id} - "
+            f"第 {self.attempt_number} 次抓取 - "
+            f"{self.get_status_display()}"
+        )
