@@ -2,21 +2,36 @@
 
 這份文件是 TubeSense AI 的共同開發依據，用來記錄與 Codex 協同開發時的目前位置、各階段目標、工作項目及完成條件。
 
-原則是先建立可執行、可測試的 Django 基礎，再完成雙資料來源與可靠背景任務，最後才串接 AI、容器化和部署。每完成一個小階段就測試並 Commit，不一次堆疊大量未驗證功能。
+原則是先建立可執行、可測試的 Django 基礎，再完成資料模型、雙資料來源與可靠背景任務，最後才串接 AI、容器化和部署。每完成一個小階段就測試並 Commit，不一次堆疊大量未驗證功能。
+
+MVP 的分析任務頁以「目前分析階段」為核心，不要求即時 Log、精確百分比或取消任務。這些不影響主要流程的功能統一保留在文件末尾的「可選開發功能」，等核心流程完成後再評估。
 
 ## 目前進度
 
 ```text
 階段 0：專案與開發環境       已完成
 階段 1：Django 基礎          已完成
-階段 2：共用 UI 與新增分析    進行中  ← 目前位置
-階段 3：資料模型與 Provider   尚未開始
+階段 2：共用 UI 與新增分析    已完成
+階段 3：資料模型與 Provider   進行中  ← 目前位置
 階段 4：YouTube 雙來源        尚未開始
-階段 5：背景任務與進度頁      尚未開始
+階段 5：背景任務與進度頁      尚未進入（頁面骨架已完成）
 階段 6：AI 分析與報告頁       尚未開始
 階段 7：測試、安全與可觀測性  尚未開始
 階段 8：Docker 與 AWS 部署    尚未開始
 ```
+
+目前已完成的核心資料流程：
+
+```text
+YouTube 網址
+    → Selenium 取得影片預覽
+    → 儲存或更新 Video
+    → 使用者按下「開始分析留言」
+    → 建立 AnalysisJob 與第一筆 FetchRun
+    → 導向分析任務頁
+```
+
+目前下一步是完成階段 3 尚缺少的留言資料模型、DTO 與留言抓取 Provider 邊界，再進入真正的 Selenium 留言抓取。
 
 ## 階段 0：專案與開發環境
 
@@ -71,26 +86,35 @@
 - [x] 完成頁面 2「新增分析」單一步驟表單。
 - [x] 使用後端驗證支援 watch、youtu.be、shorts、live 等 YouTube 網址。
 - [x] 使用 HTMX 在輸入網址後顯示影片預覽或錯誤。
-- [ ] 加入 Selenium／YouTube API 資料來源選擇。
+- [x] 將影片預覽資料儲存或更新至 `Video`。
+- [x] 從影片預覽建立 `AnalysisJob` 與第一筆 `FetchRun`，並導向分析任務頁。
 - [x] 驗證 Desktop 與 Mobile 不跑版。
 - [x] Template 文字使用可翻譯標記，為中英文切換保留能力。
+
+補充：Selenium／YouTube API 資料來源選擇延後至階段 4；目前 MVP 預設使用 Selenium，不阻擋階段 2 完成。
 
 完成條件：
 
 - 同一份 Template 能正確顯示 Desktop 與 Mobile。
 - 有效網址顯示影片縮圖與基本資料，無效網址顯示明確原因。
-- 表單能保存使用者選擇的資料來源。
+- 成功確認影片後可建立分析任務並進入任務頁。
 
 ## 階段 3：資料模型與 Provider 介面
 
 目標：先定義資料和邊界，再實作 Selenium／API，避免抓取邏輯和網站流程綁死。
 
-- [ ] 設計 `Video`、`Comment`、`AnalysisJob`、`FetchRun` 模型。
-- [ ] 設計 `CommentObservation`，記錄每次抓取看到的留言。
-- [ ] 設計 `JobLog` 與 `AnalysisResult`。
-- [ ] 建立並審查 migration。
+- [x] 設計 `Video`、`AnalysisJob`、`FetchRun` 模型。
+- [x] 建立、審查並套用上述模型的 migration。
+- [x] 將 `Video`、`AnalysisJob`、`FetchRun` 加入 Django Admin。
+- [x] 建立影片預覽 DTO 與 `YouTubeProvider` 的影片預覽介面。
+- [x] 建立影片儲存 Service，重複檢查同一影片時更新既有 `Video`。
+- [x] 建立具 transaction 保護的任務建立 Service，同時建立 `AnalysisJob` 與第一筆 `FetchRun`。
+- [ ] 設計 `Comment` 模型，保存穩定留言 ID、作者、內容及父留言關係。
+- [ ] 設計 `CommentObservation`，記錄每次 `FetchRun` 看到的留言狀態。
+- [ ] 設計 `AnalysisResult`。
+- [ ] 建立並審查留言與分析結果模型的 migration。
 - [ ] 定義 `VideoData`、`CommentData`、`FetchOptions` DTO。
-- [ ] 定義 `YouTubeProvider` 共用介面。
+- [ ] 擴充 `YouTubeProvider` 共用介面，支援留言分批抓取。
 - [ ] 建立 Fake Provider，先測試 Service，不連接外部網站。
 - [ ] 建立 `YouTubeFetchService`，Provider 不直接寫入資料庫。
 - [ ] 為網址解析、資料正規化與去重建立測試。
@@ -126,6 +150,7 @@
 ### 來源比較
 
 - [ ] 同一影片分別建立 API 與 Selenium `FetchRun`。
+- [ ] 在新增分析流程加入 Selenium／YouTube API 資料來源選擇，並保存至任務與抓取紀錄。
 - [ ] 比較留言總數、共同留言、單邊缺少留言、回覆完整度和時間。
 - [ ] 不在任務執行途中自動切換來源。
 
@@ -133,37 +158,59 @@
 
 - 新任務可以明確選擇任一來源。
 - 兩個 Provider 都回傳相同 DTO。
-- 來源失敗時保留可理解的錯誤碼與 Log。
+- 來源失敗時保留可理解的錯誤碼與錯誤訊息。
 
 ## 階段 5：背景任務與分析進度頁
 
-目標：耗時抓取不阻塞 Web Request，使用者能看到任務在哪個階段及為何失敗。
+目標：耗時抓取不阻塞 Web Request，使用者能看到任務目前所處的分析階段及失敗原因。
 
+- [x] 建立頁面 3「分析任務」的基本路由、View 與 RWD 頁面骨架。
+- [x] 使用 POST 建立任務，GET 不會意外新增任務。
+- [ ] 在 `AnalysisJob` 建立可持久化的「目前分析階段」資料。
 - [ ] 加入 Redis 與 Celery。
 - [ ] 分離 `youtube_api`、`youtube_selenium`、`analysis` Queue。
 - [ ] Selenium Worker 初期 concurrency 設為 1。
-- [ ] 建立任務狀態、階段、百分比與結構化 Log 更新方式。
-- [ ] 實作重試、逾時、取消與錯誤分類。
-- [ ] 完成頁面 3「分析進度」。
-- [ ] 使用 HTMX polling 更新進度和 Log。
+- [ ] 建立任務狀態與分析階段更新方式。
+- [ ] 實作重試、逾時與錯誤分類。
+- [ ] 依下方已定案規格完成頁面 3「分析進度」。
+- [ ] 使用 HTMX polling 更新任務狀態與分析階段。
 - [ ] 任務完成後導向報告頁。
-- [ ] 評估實際需求後再決定是否改用 WebSocket。
+
+### 頁面 3 已定案的 MVP 規格
+
+- Desktop 設計作為主要版型，Mobile 使用同一份 Template 的 RWD 版本，不另外維護不同流程。
+- 頂部保留精簡影片辨識區，只顯示縮圖、影片標題、資料來源及任務狀態。
+- 不在主要畫面顯示影片作者、觀看數、留言數或完整任務 UUID。
+- 不顯示圓形進度、進度條或百分比，只顯示目前分析階段。
+- 分析流程固定顯示以下五個階段：
+
+```text
+1. 確認影片資料
+2. 抓取留言
+3. 留言清理與正規化
+4. AI 情緒與主題分析
+5. 建立洞察報告
+```
+
+- 任務頁建立時，第 1 階段已由影片預覽流程完成；後續依資料庫中的目前階段呈現「已完成、進行中、等待中、失敗」。
+- MVP 不顯示右側即時 Log，也不提供取消分析按鈕。
 
 規劃狀態：
 
 ```text
 pending → running → awaiting_analysis → completed
               ├── retry
-              ├── cancelled
               └── failed
 ```
+
+`cancelled` 狀態暫時保留在資料模型中，MVP 不提供操作介面。
 
 完成條件：
 
 - 關閉瀏覽器不會中止背景任務。
 - Web Worker 不直接執行 Selenium。
-- 使用者重新整理頁面後仍能看到真實進度與 Log。
-- 錯誤不只出現在 Worker 終端機，也會保存到資料庫。
+- 使用者重新整理頁面後仍能看到真實任務狀態與目前分析階段。
+- 錯誤不只出現在 Worker 終端機，也會保存到任務或抓取紀錄。
 
 ## 階段 6：AI 分析與報告頁
 
@@ -194,7 +241,7 @@ pending → running → awaiting_analysis → completed
 - [ ] Selenium 失敗情境和版面變動偵測測試。
 - [ ] 環境變數管理 Secret Key、API Key 與資料庫密碼。
 - [ ] 設定 production 的 `DEBUG`、`ALLOWED_HOSTS`、CSRF、HTTPS 與安全 Header。
-- [ ] 加入結構化 Log、健康檢查與錯誤追蹤。
+- [ ] 加入後端結構化 Log、健康檢查與錯誤追蹤。
 - [ ] 定義資料保留、任務清理與備份方式。
 - [ ] 執行 Django deployment check。
 
@@ -202,7 +249,7 @@ pending → running → awaiting_analysis → completed
 
 - 主要流程有自動化測試。
 - Repository 不包含密鑰或正式環境資料。
-- 能從 Log 回答任務在哪裡、使用哪個來源及為何失敗。
+- 能從任務資料與後端 Log 回答任務在哪裡、使用哪個來源及為何失敗。
 
 ## 階段 8：Docker 與 AWS 部署
 
@@ -235,6 +282,36 @@ pending → running → awaiting_analysis → completed
 - [ ] 頁面 8：AI 洞察中心。
 
 這些頁面不阻擋 MVP。開始前會重新確認功能價值、資料來源與 UI，而不是只因為已有 Stitch 畫面就直接實作。
+
+## 可選開發功能：核心流程完成後再評估
+
+以下功能目前不做，也不列入 MVP 完成條件。接近專案完成時，依實際使用需求與剩餘時間決定是否加入。
+
+### 分析任務即時 Log
+
+- [ ] 評估使用者是否真的需要在網頁上查看逐筆執行事件。
+- [ ] 若需要，再設計 `JobLog` 模型、資料保留期限與敏感資訊過濾。
+- [ ] 讓 Worker 寫入結構化事件，並由 HTMX polling 更新右側 Log 區塊。
+- [ ] 評估資料量、查詢頻率及清理策略。
+
+不做這項功能時，後端仍保留標準 Python 結構化 Log，正式環境可交由 CloudWatch 或其他錯誤追蹤工具集中查看。
+
+### 數字進度與百分比
+
+- [ ] 評估各 Provider 與 AI 分析步驟能否提供可信的總工作量。
+- [ ] 若能可靠計算，再恢復進度條、圓形進度或百分比顯示。
+- [ ] 定義各分析階段的權重，避免顯示長時間停住或不真實的百分比。
+
+`AnalysisJob.progress_percentage` 欄位暫時保留，但 MVP 頁面不使用它；現階段以分析階段呈現真實進度。
+
+### 取消分析
+
+- [ ] 評估是否有長時間任務值得讓使用者主動取消。
+- [ ] 若需要，再實作取消端點、權限與 CSRF 保護。
+- [ ] 讓 Celery 任務、Selenium Driver、`AnalysisJob` 與 `FetchRun` 能一致地停止並寫入 `cancelled` 狀態。
+- [ ] 處理取消與任務剛好完成、失敗或重試之間的競態條件。
+
+`cancelled` 狀態暫時保留，但目前不顯示取消按鈕。
 
 ## Git 工作流程
 
