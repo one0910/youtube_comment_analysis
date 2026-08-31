@@ -1,3 +1,4 @@
+import uuid
 from unittest.mock import MagicMock, patch
 
 from .providers.youtube_provider import (
@@ -7,7 +8,11 @@ from .providers.youtube_provider import (
 
 from django.test import SimpleTestCase,TestCase #TestCase：每個測試之間隔離資料庫資料。
 from django.urls import reverse #reverse()：透過 URL 名稱取得網址。
+from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
+
 from .forms import NewAnalysisForm
+from .models import AnalysisJob, Video
 from .services.youtube_url_parser import (
     InvalidYouTubeUrlError,
     get_video_id_from_youtube_url,
@@ -19,6 +24,70 @@ from .services.youtube_count_parser import (
 from .providers.selenium_youtube_provider import (
     get_video_comment_count,
 )
+
+"""測試影片與分析任務的資料庫規則。"""
+class VideoAndAnalysisJobModelTests(TestCase):
+
+    def setUp(self):
+        """每個測試開始前建立一支測試影片。"""
+
+        self.video_record = Video.objects.create(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="測試影片",
+            video_author_name="測試頻道",
+            video_thumbnail_url=(
+                "https://"
+                "i.ytimg.com/vi/"
+                "dQw4w9WgXcQ/hqdefault.jpg"
+            ),
+            video_view_count=123_456,
+            video_comment_count=789,
+        )
+
+    """新任務應使用 Selenium、等待處理及零進度。"""
+    def test_analysis_job_uses_expected_defaults(self):
+        analysis_job = AnalysisJob.objects.create(video=self.video_record)
+        self.assertIsInstance(analysis_job.id, uuid.UUID)
+        self.assertEqual(analysis_job.data_source,AnalysisJob.DataSource.SELENIUM)
+        self.assertEqual(analysis_job.status,AnalysisJob.Status.PENDING)
+        self.assertEqual(analysis_job.progress_percentage,0)
+        self.assertEqual(analysis_job.error_message,"",)
+        self.assertIsNone(analysis_job.started_at)
+        self.assertIsNone(analysis_job.completed_at)
+
+    """Video 應能透過 related_name 找到分析任務。"""
+    def test_video_can_find_related_analysis_jobs(self):
+
+        analysis_job = AnalysisJob.objects.create(video=self.video_record)
+
+        related_analysis_job_exists = (
+            self.video_record.analysis_jobs.filter(id=analysis_job.id).exists()
+        )
+
+        self.assertTrue(related_analysis_job_exists)
+        self.assertEqual(analysis_job.video,self.video_record)
+
+    """資料庫必須拒絕超過 100 的任務進度。"""
+    def test_progress_percentage_cannot_exceed_100(self):
+
+        with self.assertRaises(IntegrityError):
+            # 使用獨立 Transaction，避免故意產生的資料庫錯誤
+            # 破壞 Django TestCase 外層的測試 Transaction。
+            with transaction.atomic():
+                AnalysisJob.objects.create(video=self.video_record,progress_percentage=101)
+
+    """已有分析任務的影片不可直接刪除。"""
+    def test_video_with_analysis_job_is_protected_from_deletion(self):
+        AnalysisJob.objects.create(video=self.video_record)
+        with self.assertRaises(ProtectedError):
+            self.video_record.delete()
+
+    """相同 YouTube 影片 ID 不可建立兩筆 Video。"""
+    def test_youtube_video_id_must_be_unique(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Video.objects.create(youtube_video_id="dQw4w9WgXcQ",video_title="重複影片")
+
 
 """分析總覽頁面的基本測試。"""
 class OverviewViewTests(TestCase): #這是Django 內建的測試指令。它會自動尋找 analyses/tests.py 內符合規則的測試：
@@ -132,7 +201,6 @@ class NewAnalysisViewTests(TestCase):
         self.assertContains( response,"請輸入支援的 YouTube 影片網址。")
 
 
-
 """測試新增分析表單的資料驗證規則。"""
 class NewAnalysisFormValidationTests(SimpleTestCase):
     def test_form_rejects_non_youtube_url(self):
@@ -155,9 +223,9 @@ class NewAnalysisFormValidationTests(SimpleTestCase):
             form.errors,
         )
 
-class SeleniumYouTubeCommentCountTests(SimpleTestCase):
-    """測試 Selenium 等待 YouTube 動態載入留言數。"""
 
+"""測試 Selenium 等待 YouTube 動態載入留言數。"""
+class SeleniumYouTubeCommentCountTests(SimpleTestCase):
     @patch("analyses.providers.selenium_youtube_provider.sleep")
     def test_waits_until_comment_count_contains_number(self, mock_sleep):
         """只有「留言」時應繼續等待，直到取得完整數量。"""
@@ -183,8 +251,8 @@ class SeleniumYouTubeCommentCountTests(SimpleTestCase):
         mock_sleep.assert_called_once()
 
 
+"""測試 YouTube 顯示數量的文字轉換。"""
 class YouTubeCountParserTests(SimpleTestCase):
-    """測試 YouTube 顯示數量的文字轉換。"""
 
     def test_supported_count_text_returns_integer(self):
         """常見的中文及英文數量格式應正確轉成整數。"""
