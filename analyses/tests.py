@@ -1,10 +1,6 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
-
-from .providers.youtube_provider import (
-    YouTubeVideoPreviewData,
-    YouTubeVideoUnavailableError,
-)
 
 from django.test import SimpleTestCase,TestCase #TestCase：每個測試之間隔離資料庫資料。
 from django.urls import reverse #reverse()：透過 URL 名稱取得網址。
@@ -30,8 +26,21 @@ from .services.analysis_job_creation_service import (
     create_pending_analysis_job_for_video,
 )
 
-from .providers.selenium_youtube_provider import (
-    get_video_comment_count,
+from .providers.youtube_provider import (
+    YouTubeCommentData,
+    YouTubeCommentFetchOptions,
+    YouTubeCommentSortOrder,
+    YouTubeProvider,
+    YouTubeVideoPreviewData,
+    YouTubeVideoUnavailableError,
+)
+
+from .providers.fake_youtube_provider import FakeYouTubeProvider
+from .providers.selenium_youtube_provider import get_video_comment_count
+
+from .services.youtube_fetch_service import (
+    YouTubeCommentVideoMismatchError,
+    fetch_and_store_youtube_comments,
 )
 
 """測試影片與分析任務的資料庫規則。"""
@@ -584,10 +593,11 @@ class CommentModelTests(TestCase):
         self.assertIsNone(comment_record.parent_comment)
         self.assertIsNone(comment_record.like_count)
         self.assertFalse(comment_record.is_pinned)
+        self.assertEqual(comment_record.parent_youtube_comment_id, "")
         self.assertTrue(self.video_record.comments.filter(id=comment_record.id).exists())
 
+    """回覆留言應保存父留言關聯。"""
     def test_reply_comment_can_find_parent_comment(self):
-        """回覆留言應保存父留言關聯。"""
 
         parent_comment = Comment.objects.create(
             youtube_comment_id="UgzParentComment123",
@@ -599,6 +609,7 @@ class CommentModelTests(TestCase):
         reply_comment = Comment.objects.create(
             youtube_comment_id="UgzReplyComment123",
             video=self.video_record,
+            parent_youtube_comment_id=parent_comment.youtube_comment_id,
             parent_comment=parent_comment,
             author_display_name="回覆作者",
             comment_text="這是一則回覆。",
@@ -606,6 +617,7 @@ class CommentModelTests(TestCase):
 
         self.assertEqual(reply_comment.parent_comment, parent_comment)
         self.assertTrue(parent_comment.replies.filter(id=reply_comment.id).exists())
+        self.assertEqual(reply_comment.parent_youtube_comment_id, parent_comment.youtube_comment_id)
 
     def test_youtube_comment_id_must_be_unique(self):
         """相同 YouTube 留言 ID 不可重複建立。"""
@@ -801,3 +813,362 @@ class CommentObservationModelTests(TestCase):
 
         self.assertEqual(CommentObservation.objects.count(), 0)
         self.assertTrue(FetchRun.objects.filter(id=self.fetch_run.id).exists())
+
+
+"""測試 YouTube Provider 使用的資料物件。"""
+class YouTubeProviderDataTests(SimpleTestCase):
+
+    def test_comment_data_uses_expected_values(self):
+        """留言 DTO 應保存 Provider 取得的原始資料。"""
+
+        comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzComment123",
+            youtube_video_id="dQw4w9WgXcQ",
+            comment_text="這是一則測試留言。",
+            parent_youtube_comment_id="UgzParent123",
+            author_display_name="測試作者",
+            like_count=25,
+            published_time_text="2 天前",
+            is_pinned=True,
+        )
+
+        self.assertEqual(comment_data.youtube_comment_id, "UgzComment123")
+        self.assertEqual(comment_data.parent_youtube_comment_id, "UgzParent123")
+        self.assertEqual(comment_data.like_count, 25)
+        self.assertTrue(comment_data.is_pinned)
+
+    def test_fetch_options_use_expected_defaults(self):
+        """抓取選項預設使用最新排序、包含回覆且不限數量。"""
+
+        fetch_options = YouTubeCommentFetchOptions()
+
+        self.assertEqual(fetch_options.sort_order, YouTubeCommentSortOrder.NEWEST)
+        self.assertTrue(fetch_options.include_replies)
+        self.assertIsNone(fetch_options.maximum_comment_count)
+
+    def test_fetch_options_accept_comment_count_limit(self):
+        """抓取選項應接受有效的留言數量上限。"""
+
+        fetch_options = YouTubeCommentFetchOptions(maximum_comment_count=100)
+
+        self.assertEqual(fetch_options.maximum_comment_count, 100)
+
+    def test_fetch_options_reject_non_positive_comment_count_limit(self):
+        """留言數量上限不可使用零或負數。"""
+
+        with self.assertRaises(ValueError):
+            YouTubeCommentFetchOptions(maximum_comment_count=0)
+
+
+"""測試不連接外部網站的 Fake YouTube Provider。"""
+class FakeYouTubeProviderTests(SimpleTestCase):
+
+    def setUp(self):
+        """建立固定影片及留言測試資料。"""
+
+        self.youtube_video_id = "dQw4w9WgXcQ"
+        base_published_at = datetime(2026, 9, 1, tzinfo=UTC)
+
+        video_preview_data = YouTubeVideoPreviewData(
+            youtube_video_id=self.youtube_video_id,
+            video_title="Fake Provider 測試影片",
+            video_author_name="測試頻道",
+            video_thumbnail_url=None,
+            video_view_count=1_000,
+            video_comment_count=3,
+        )
+
+        self.parent_comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzParent123",
+            youtube_video_id=self.youtube_video_id,
+            comment_text="較早發布但按讚數最多的主留言",
+            like_count=100,
+            published_at=base_published_at,
+        )
+
+        self.reply_comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzReply123",
+            youtube_video_id=self.youtube_video_id,
+            parent_youtube_comment_id="UgzParent123",
+            comment_text="回覆留言",
+            like_count=20,
+            published_at=base_published_at + timedelta(hours=1),
+        )
+
+        self.newest_comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzNewest123",
+            youtube_video_id=self.youtube_video_id,
+            comment_text="最新發布的主留言",
+            like_count=10,
+            published_at=base_published_at + timedelta(hours=2),
+        )
+
+        self.fake_provider = FakeYouTubeProvider(
+            video_preview_data=video_preview_data,
+            comment_data=[
+                self.parent_comment_data,
+                self.reply_comment_data,
+                self.newest_comment_data,
+            ],
+        )
+
+    def test_get_video_preview_returns_configured_video(self):
+        """Fake Provider 應回傳預先設定的影片資料。"""
+
+        video_preview_data = self.fake_provider.get_video_preview(youtube_video_id=self.youtube_video_id)
+
+        self.assertEqual(video_preview_data.youtube_video_id, self.youtube_video_id)
+        self.assertEqual(video_preview_data.video_title, "Fake Provider 測試影片")
+
+    def test_unknown_video_id_raises_unavailable_error(self):
+        """查詢未設定的影片 ID 時應明確失敗。"""
+
+        with self.assertRaises(YouTubeVideoUnavailableError):
+            self.fake_provider.get_video_preview(youtube_video_id="unknown1234")
+
+    def test_newest_sort_returns_comments_by_published_time(self):
+        """最新排序應由新到舊回傳留言。"""
+
+        comment_data = list(
+            self.fake_provider.iter_video_comments(
+                youtube_video_id=self.youtube_video_id,
+                fetch_options=YouTubeCommentFetchOptions(),
+            )
+        )
+
+        self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzNewest123", "UgzReply123", "UgzParent123"])
+
+    def test_top_sort_returns_comments_by_like_count(self):
+        """熱門排序應依按讚數由高到低回傳留言。"""
+
+        comment_data = list(
+            self.fake_provider.iter_video_comments(
+                youtube_video_id=self.youtube_video_id,
+                fetch_options=YouTubeCommentFetchOptions(sort_order=YouTubeCommentSortOrder.TOP),
+            )
+        )
+
+        self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzParent123", "UgzReply123", "UgzNewest123"])
+
+    def test_replies_can_be_excluded(self):
+        """關閉回覆選項時，不應回傳具有父留言 ID 的留言。"""
+
+        comment_data = list(
+            self.fake_provider.iter_video_comments(
+                youtube_video_id=self.youtube_video_id,
+                fetch_options=YouTubeCommentFetchOptions(include_replies=False),
+            )
+        )
+
+        self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzNewest123", "UgzParent123"])
+
+    def test_comment_count_limit_is_applied(self):
+        """留言數量上限應限制 Fake Provider 回傳的資料量。"""
+
+        comment_data = list(
+            self.fake_provider.iter_video_comments(
+                youtube_video_id=self.youtube_video_id,
+                fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2),
+            )
+        )
+
+        self.assertEqual(len(comment_data), 2)
+
+
+"""測試從 Provider 抓取並保存 YouTube 留言的 Service。"""
+class YouTubeFetchServiceTests(TestCase):
+
+    def setUp(self):
+        """建立影片、任務、抓取紀錄與 Fake Provider。"""
+
+        self.youtube_video_id = "dQw4w9WgXcQ"
+
+        self.video_record = Video.objects.create(
+            youtube_video_id=self.youtube_video_id,
+            video_title="留言抓取 Service 測試影片",
+        )
+
+        self.analysis_job = AnalysisJob.objects.create(
+            video=self.video_record,
+        )
+
+        self.fetch_run = FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+        )
+
+        self.video_preview_data = YouTubeVideoPreviewData(
+            youtube_video_id=self.youtube_video_id,
+            video_title="留言抓取 Service 測試影片",
+            video_author_name="測試頻道",
+            video_thumbnail_url=None,
+            video_view_count=1_000,
+            video_comment_count=3,
+        )
+
+        base_published_at = datetime(2026, 9, 1, tzinfo=UTC)
+
+        self.parent_comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzParent123",
+            youtube_video_id=self.youtube_video_id,
+            comment_text="較早發布的父留言",
+            author_display_name="父留言作者",
+            like_count=100,
+            published_at=base_published_at,
+        )
+
+        self.reply_comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzReply123",
+            youtube_video_id=self.youtube_video_id,
+            parent_youtube_comment_id="UgzParent123",
+            comment_text="父留言的回覆",
+            author_display_name="回覆作者",
+            like_count=20,
+            published_at=base_published_at + timedelta(hours=1),
+        )
+
+        self.newest_comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzNewest123",
+            youtube_video_id=self.youtube_video_id,
+            comment_text="最新留言",
+            author_display_name="最新留言作者",
+            like_count=10,
+            published_at=base_published_at + timedelta(hours=2),
+        )
+
+        self.fake_provider = FakeYouTubeProvider(
+            video_preview_data=self.video_preview_data,
+            comment_data=[
+                self.parent_comment_data,
+                self.reply_comment_data,
+                self.newest_comment_data,
+            ],
+        )
+
+    def test_fetch_stores_comments_observations_and_parent_relationship(self):
+        """Service 應保存留言、快照並補上父留言關聯。"""
+
+        fetched_comment_count = fetch_and_store_youtube_comments(
+            fetch_run=self.fetch_run,
+            youtube_provider=self.fake_provider,
+        )
+
+        self.fetch_run.refresh_from_db()
+        parent_comment = Comment.objects.get(youtube_comment_id="UgzParent123")
+        reply_comment = Comment.objects.get(youtube_comment_id="UgzReply123")
+
+        self.assertEqual(fetched_comment_count, 3)
+        self.assertEqual(self.fetch_run.fetched_comment_count, 3)
+        self.assertEqual(Comment.objects.count(), 3)
+        self.assertEqual(CommentObservation.objects.count(), 3)
+        self.assertEqual(reply_comment.parent_youtube_comment_id, "UgzParent123")
+        self.assertEqual(reply_comment.parent_comment, parent_comment)
+
+    def test_unresolved_parent_youtube_id_is_preserved(self):
+        """只抓到回覆但尚未抓到父留言時，應保存原始父留言 ID。"""
+
+        fetched_comment_count = fetch_and_store_youtube_comments(
+            fetch_run=self.fetch_run,
+            youtube_provider=self.fake_provider,
+            fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2),
+        )
+
+        reply_comment = Comment.objects.get(youtube_comment_id="UgzReply123")
+
+        self.assertEqual(fetched_comment_count, 2)
+        self.assertEqual(reply_comment.parent_youtube_comment_id, "UgzParent123")
+        self.assertIsNone(reply_comment.parent_comment)
+        self.assertFalse(Comment.objects.filter(youtube_comment_id="UgzParent123").exists())
+
+    def test_repeating_same_fetch_run_does_not_duplicate_records(self):
+        """同一 FetchRun 重跑時，不可重複建立留言或觀察紀錄。"""
+
+        fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=self.fake_provider)
+        fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=self.fake_provider)
+
+        self.fetch_run.refresh_from_db()
+
+        self.assertEqual(Comment.objects.count(), 3)
+        self.assertEqual(CommentObservation.objects.count(), 3)
+        self.assertEqual(self.fetch_run.fetched_comment_count, 3)
+
+    def test_new_fetch_run_updates_comment_and_keeps_old_observation(self):
+        """新的抓取應更新留言目前資料，但保留舊快照。"""
+
+        fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=self.fake_provider)
+
+        second_fetch_run = FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+            attempt_number=2,
+        )
+
+        updated_comment_data = YouTubeCommentData(
+            youtube_comment_id="UgzNewest123",
+            youtube_video_id=self.youtube_video_id,
+            comment_text="更新後的留言內容",
+            author_display_name="最新留言作者",
+            like_count=99,
+            published_at=self.newest_comment_data.published_at,
+        )
+
+        updated_fake_provider = FakeYouTubeProvider(
+            video_preview_data=self.video_preview_data,
+            comment_data=[updated_comment_data],
+        )
+
+        fetch_and_store_youtube_comments(fetch_run=second_fetch_run, youtube_provider=updated_fake_provider)
+
+        updated_comment = Comment.objects.get(youtube_comment_id="UgzNewest123")
+        first_observation = CommentObservation.objects.get(fetch_run=self.fetch_run, comment=updated_comment)
+        second_observation = CommentObservation.objects.get(fetch_run=second_fetch_run, comment=updated_comment)
+
+        self.assertEqual(updated_comment.comment_text, "更新後的留言內容")
+        self.assertEqual(updated_comment.like_count, 99)
+        self.assertEqual(first_observation.observed_comment_text, "最新留言")
+        self.assertEqual(first_observation.observed_like_count, 10)
+        self.assertEqual(second_observation.observed_comment_text, "更新後的留言內容")
+        self.assertEqual(second_observation.observed_like_count, 99)
+
+    def test_provider_failure_keeps_successfully_stored_comments(self):
+        """Provider 中途失敗時，已成功保存的留言與數量應保留。"""
+
+        failing_provider = MagicMock(spec=YouTubeProvider)
+
+        def failing_comment_iterator():
+            yield self.newest_comment_data
+            raise RuntimeError("模擬 Provider 中途失敗")
+
+        failing_provider.iter_video_comments.return_value = failing_comment_iterator()
+
+        with self.assertRaises(RuntimeError):
+            fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=failing_provider)
+
+        self.fetch_run.refresh_from_db()
+
+        self.assertEqual(Comment.objects.count(), 1)
+        self.assertEqual(CommentObservation.objects.count(), 1)
+        self.assertEqual(self.fetch_run.fetched_comment_count, 1)
+
+    def test_existing_comment_from_another_video_is_rejected(self):
+        """相同留言 ID 已屬於其他影片時，不可被移到目前影片。"""
+
+        other_video_record = Video.objects.create(
+            youtube_video_id="abcdefghijk",
+            video_title="其他測試影片",
+        )
+
+        Comment.objects.create(
+            youtube_comment_id="UgzNewest123",
+            video=other_video_record,
+            comment_text="其他影片的留言",
+        )
+
+        with self.assertRaises(YouTubeCommentVideoMismatchError):
+            fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=self.fake_provider)
+
+        self.fetch_run.refresh_from_db()
+
+        self.assertEqual(self.fetch_run.fetched_comment_count, 0)
+        self.assertEqual(CommentObservation.objects.count(), 0)
+        self.assertEqual(Comment.objects.get(youtube_comment_id="UgzNewest123").video, other_video_record)

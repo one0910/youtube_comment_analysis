@@ -290,6 +290,14 @@ class Comment(models.Model):
         verbose_name=gettext_lazy("影片"),
     )
 
+    parent_youtube_comment_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=gettext_lazy("父留言的 YouTube 留言 ID"),
+    )
+
     # 沒有 parent_comment 代表主留言；有值則代表回覆留言，
     # 並由 parent_comment 指向被回覆的父留言。
     parent_comment = models.ForeignKey(

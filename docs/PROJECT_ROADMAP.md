@@ -12,8 +12,8 @@ MVP 的分析任務頁以「目前分析階段」為核心，不要求即時 Log
 階段 0：專案與開發環境       已完成
 階段 1：Django 基礎          已完成
 階段 2：共用 UI 與新增分析    已完成
-階段 3：資料模型與 Provider   進行中  ← 目前位置
-階段 4：YouTube 雙來源        尚未開始
+階段 3：資料模型與 Provider   已完成
+階段 4：YouTube 雙來源        進行中  ← 目前位置
 階段 5：背景任務與進度頁      尚未進入（頁面骨架已完成）
 階段 6：AI 分析與報告頁       尚未開始
 階段 7：測試、安全與可觀測性  尚未開始
@@ -31,7 +31,7 @@ YouTube 網址
     → 導向分析任務頁
 ```
 
-目前下一步是完成階段 3 尚缺少的留言資料模型、DTO 與留言抓取 Provider 邊界，再進入真正的 Selenium 留言抓取。
+目前下一步是將既有 Selenium 留言抓取程式重構至 `SeleniumYouTubeProvider`，讓它依照共用介面逐筆輸出 `YouTubeCommentData`。
 
 ## 階段 0：專案與開發環境
 
@@ -112,14 +112,12 @@ YouTube 網址
 - [x] 建立具 transaction 保護的任務建立 Service，同時建立 `AnalysisJob` 與第一筆 `FetchRun`。
 - [x] 設計 `Comment` 模型，保存穩定留言 ID、作者、內容及父留言關係。
 - [x] 設計 `CommentObservation`，記錄每次 `FetchRun` 看到的留言狀態。
-- [ ] 設計 `AnalysisResult`。
 - [x] 建立、審查並套用留言與留言觀察紀錄模型的 migration。
-- [ ] 建立並審查分析結果模型的 migration。
-- [ ] 定義 `VideoData`、`CommentData`、`FetchOptions` DTO。
-- [ ] 擴充 `YouTubeProvider` 共用介面，支援留言分批抓取。
-- [ ] 建立 Fake Provider，先測試 Service，不連接外部網站。
-- [ ] 建立 `YouTubeFetchService`，Provider 不直接寫入資料庫。
-- [ ] 為網址解析、資料正規化與去重建立測試。
+- [x] 定義 `YouTubeVideoPreviewData`、`YouTubeCommentData`、`YouTubeCommentFetchOptions` DTO。
+- [x] 擴充 `YouTubeProvider` 共用介面，使用 Iterator 支援逐筆留言串流。
+- [x] 建立 Fake Provider，先測試 Service，不連接外部網站。
+- [x] 建立 `YouTubeFetchService`，Provider 不直接寫入資料庫。
+- [x] 為網址解析、資料正規化、去重、歷史快照與父留言關聯建立測試。
 
 完成條件：
 
@@ -220,6 +218,7 @@ pending → running → awaiting_analysis → completed
 
 - [ ] 確認 AI 模型、費用、資料限制與批次策略。
 - [ ] 定義 AI Provider 介面與結構化輸出 Schema。
+- [ ] 設計 `AnalysisResult` 模型並建立、審查及套用 migration。
 - [ ] 實作留言清理、分批、Token 預估與摘要合併。
 - [ ] 產生留言摘要、情緒、主題、常見問題、建議與負面回饋。
 - [ ] 驗證比例、分類數量與原始留言數一致。

@@ -1,8 +1,18 @@
-from abc import ABC, abstractmethod #abc 是 Python 內建模組，全名是：Abstract Base Classes，用來建立一個「不能直接使用，只負責制定規格」的父類別。
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
 
 
-@dataclass(frozen=True) #@dataclass是負責自動建立資料物件需要的方法，frozen=True 代表物件建立完成後，不允許重新修改欄位。
+class YouTubeCommentSortOrder(StrEnum):
+    """YouTube 留言可使用的排序方式。"""
+
+    TOP = "top"
+    NEWEST = "newest"
+
+
+@dataclass(frozen=True)
 class YouTubeVideoPreviewData:
     """影片網址驗證成功後，顯示預覽卡片需要的資料。"""
 
@@ -12,6 +22,42 @@ class YouTubeVideoPreviewData:
     video_thumbnail_url: str | None
     video_view_count: int | None
     video_comment_count: int | None
+
+
+@dataclass(frozen=True)
+class YouTubeCommentData:
+    """Provider 從 YouTube 取得的一則留言資料。"""
+
+    youtube_comment_id: str
+    youtube_video_id: str
+    comment_text: str
+    parent_youtube_comment_id: str | None = None
+    author_display_name: str | None = None
+    author_channel_id: str | None = None
+    author_channel_url: str | None = None
+    like_count: int | None = None
+    published_at: datetime | None = None
+    published_time_text: str | None = None
+    youtube_updated_at: datetime | None = None
+    is_pinned: bool = False
+
+
+@dataclass(frozen=True)
+class YouTubeCommentFetchOptions:
+    """控制一次 YouTube 留言抓取的共用選項。"""
+
+    sort_order: YouTubeCommentSortOrder = YouTubeCommentSortOrder.NEWEST
+    include_replies: bool = True
+    maximum_comment_count: int | None = None
+
+    def __post_init__(self):
+        """留言數量上限有設定時，必須至少為一。"""
+
+        if (
+            self.maximum_comment_count is not None
+            and self.maximum_comment_count < 1
+        ):
+            raise ValueError("留言抓取數量上限必須至少為 1。")
 
 
 class YouTubeVideoUnavailableError(Exception):
@@ -29,13 +75,24 @@ class YouTubeVideoUnavailableError(Exception):
             provider_reason
             or f"YouTube playability status: {provider_status}"
         )
-
         super().__init__(error_message)
+
 
 class YouTubeProvider(ABC):
     """所有 YouTube 資料來源都必須遵守的共同介面。"""
 
-    @abstractmethod #強制實際 Provider 實作指定方法，所有繼承 YouTubeProvider 的子類別，都必須實作這個方法。
-    def get_video_preview(self,youtube_video_id: str) -> YouTubeVideoPreviewData:
+    @abstractmethod
+    def get_video_preview(self, youtube_video_id: str) -> YouTubeVideoPreviewData:
         """根據影片 ID 取得影片預覽資料。"""
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def iter_video_comments(
+        self,
+        youtube_video_id: str,
+        fetch_options: YouTubeCommentFetchOptions,
+    ) -> Iterator[YouTubeCommentData]:
+        """逐筆回傳指定影片的 YouTube 留言資料。"""
+
         raise NotImplementedError

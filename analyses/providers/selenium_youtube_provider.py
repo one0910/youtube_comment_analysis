@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from time import sleep
 
 from selenium.common.exceptions import TimeoutException
@@ -13,6 +14,8 @@ from analyses.services.youtube_count_parser import (
 
 from .selenium_driver_factory import create_local_chrome_driver
 from .youtube_provider import (
+    YouTubeCommentData,
+    YouTubeCommentFetchOptions,
     YouTubeProvider,
     YouTubeVideoPreviewData,
     YouTubeVideoUnavailableError,
@@ -166,3 +169,12 @@ class SeleniumYouTubeProvider(YouTubeProvider):
         finally:
             # 成功或失敗都必須關閉 Chrome。
             chrome_driver.quit()
+
+    def iter_video_comments(
+        self,
+        youtube_video_id: str,
+        fetch_options: YouTubeCommentFetchOptions,
+    ) -> Iterator[YouTubeCommentData]:
+        """逐筆回傳 Selenium 抓取的留言；實作將於下一階段補上。"""
+
+        raise NotImplementedError("Selenium 留言抓取功能尚未實作。")
