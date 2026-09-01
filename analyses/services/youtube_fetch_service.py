@@ -94,7 +94,6 @@ def _save_comment_and_observation(
         raise YouTubeCommentVideoMismatchError("相同 YouTube 留言 ID 已經屬於另一支影片。")
 
     parent_youtube_comment_id = (comment_data.parent_youtube_comment_id or "" )
-
     parent_comment_record = None
 
     if parent_youtube_comment_id:
