@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 
 from .forms import NewAnalysisForm
-from .models import AnalysisJob, FetchRun, Video
+from .models import AnalysisJob, Comment, CommentObservation, FetchRun, Video
 from .services.youtube_url_parser import (
     InvalidYouTubeUrlError,
     get_video_id_from_youtube_url,
@@ -557,3 +557,247 @@ class FetchRunModelTests(TestCase):
 
         self.analysis_job.delete()
         self.assertEqual(FetchRun.objects.count(), 0)
+
+
+"""測試 YouTube 留言的資料庫規則。"""
+class CommentModelTests(TestCase):
+
+    def setUp(self):
+        """每個測試開始前建立一支測試影片。"""
+
+        self.video_record = Video.objects.create(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="留言測試影片",
+        )
+
+    def test_top_level_comment_can_be_created(self):
+        """主留言應能建立並由 Video 反向查詢。"""
+
+        comment_record = Comment.objects.create(
+            youtube_comment_id="UgzTopLevelComment123",
+            video=self.video_record,
+            author_display_name="測試作者",
+            comment_text="這是一則主留言。",
+        )
+
+        self.assertEqual(comment_record.video, self.video_record)
+        self.assertIsNone(comment_record.parent_comment)
+        self.assertIsNone(comment_record.like_count)
+        self.assertFalse(comment_record.is_pinned)
+        self.assertTrue(self.video_record.comments.filter(id=comment_record.id).exists())
+
+    def test_reply_comment_can_find_parent_comment(self):
+        """回覆留言應保存父留言關聯。"""
+
+        parent_comment = Comment.objects.create(
+            youtube_comment_id="UgzParentComment123",
+            video=self.video_record,
+            author_display_name="主留言作者",
+            comment_text="這是一則主留言。",
+        )
+
+        reply_comment = Comment.objects.create(
+            youtube_comment_id="UgzReplyComment123",
+            video=self.video_record,
+            parent_comment=parent_comment,
+            author_display_name="回覆作者",
+            comment_text="這是一則回覆。",
+        )
+
+        self.assertEqual(reply_comment.parent_comment, parent_comment)
+        self.assertTrue(parent_comment.replies.filter(id=reply_comment.id).exists())
+
+    def test_youtube_comment_id_must_be_unique(self):
+        """相同 YouTube 留言 ID 不可重複建立。"""
+
+        Comment.objects.create(
+            youtube_comment_id="UgzDuplicateComment123",
+            video=self.video_record,
+            comment_text="第一次抓到的留言。",
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Comment.objects.create(
+                    youtube_comment_id="UgzDuplicateComment123",
+                    video=self.video_record,
+                    comment_text="重複抓到的留言。",
+                )
+
+    def test_deleting_parent_comment_keeps_reply_comment(self):
+        """刪除父留言後，回覆留言應保留但父留言關聯變成空值。"""
+
+        parent_comment = Comment.objects.create(
+            youtube_comment_id="UgzDeletedParent123",
+            video=self.video_record,
+            comment_text="之後會被刪除的父留言。",
+        )
+
+        reply_comment = Comment.objects.create(
+            youtube_comment_id="UgzRemainingReply123",
+            video=self.video_record,
+            parent_comment=parent_comment,
+            comment_text="父留言刪除後仍需保留的回覆。",
+        )
+
+        parent_comment.delete()
+        reply_comment.refresh_from_db()
+
+        self.assertIsNone(reply_comment.parent_comment)
+        self.assertTrue(Comment.objects.filter(id=reply_comment.id).exists())
+
+    def test_deleting_video_also_deletes_comments(self):
+        """刪除影片時，所屬留言應一起刪除。"""
+
+        Comment.objects.create(
+            youtube_comment_id="UgzCascadeComment123",
+            video=self.video_record,
+            comment_text="影片刪除時一起刪除的留言。",
+        )
+
+        self.video_record.delete()
+
+        self.assertEqual(Comment.objects.count(), 0)
+
+
+"""測試留言觀察紀錄的資料庫規則。"""
+class CommentObservationModelTests(TestCase):
+
+    def setUp(self):
+        """建立測試需要的影片、任務、抓取紀錄與留言。"""
+
+        self.video_record = Video.objects.create(
+            youtube_video_id="dQw4w9WgXcQ",
+            video_title="留言觀察紀錄測試影片",
+        )
+
+        self.analysis_job = AnalysisJob.objects.create(
+            video=self.video_record,
+        )
+
+        self.fetch_run = FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+        )
+
+        self.comment_record = Comment.objects.create(
+            youtube_comment_id="UgzObservedComment123",
+            video=self.video_record,
+            author_display_name="目前作者名稱",
+            comment_text="目前留言內容",
+            like_count=25,
+        )
+
+    def test_comment_observation_can_be_created(self):
+        """抓取紀錄應能保存留言快照並反向查詢。"""
+
+        comment_observation = CommentObservation.objects.create(
+            fetch_run=self.fetch_run,
+            comment=self.comment_record,
+            observed_author_display_name="抓取時作者名稱",
+            observed_comment_text="抓取時留言內容",
+            observed_like_count=10,
+            observed_published_time_text="2 天前",
+            observed_is_pinned=True,
+        )
+
+        self.assertEqual(comment_observation.fetch_run, self.fetch_run)
+        self.assertEqual(comment_observation.comment, self.comment_record)
+        self.assertEqual(comment_observation.observed_like_count, 10)
+        self.assertTrue(comment_observation.observed_is_pinned)
+        self.assertIsNotNone(comment_observation.observed_at)
+        self.assertTrue(self.fetch_run.comment_observations.filter(id=comment_observation.id).exists())
+        self.assertTrue(self.comment_record.observations.filter(id=comment_observation.id).exists())
+
+    def test_same_comment_cannot_be_observed_twice_in_same_fetch_run(self):
+        """同一次抓取不可重複建立同一則留言的觀察紀錄。"""
+
+        CommentObservation.objects.create(
+            fetch_run=self.fetch_run,
+            comment=self.comment_record,
+            observed_comment_text="第一次觀察到的內容",
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CommentObservation.objects.create(
+                    fetch_run=self.fetch_run,
+                    comment=self.comment_record,
+                    observed_comment_text="同一次抓取的重複內容",
+                )
+
+    def test_same_comment_can_be_observed_in_different_fetch_runs(self):
+        """不同抓取紀錄可以保存同一則留言的不同快照。"""
+
+        second_fetch_run = FetchRun.objects.create(
+            analysis_job=self.analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+            attempt_number=2,
+        )
+
+        first_observation = CommentObservation.objects.create(
+            fetch_run=self.fetch_run,
+            comment=self.comment_record,
+            observed_comment_text="第一次抓取的留言內容",
+            observed_like_count=10,
+        )
+
+        second_observation = CommentObservation.objects.create(
+            fetch_run=second_fetch_run,
+            comment=self.comment_record,
+            observed_comment_text="第二次抓取的留言內容",
+            observed_like_count=25,
+        )
+
+        self.assertEqual(CommentObservation.objects.count(), 2)
+        self.assertEqual(first_observation.observed_like_count, 10)
+        self.assertEqual(second_observation.observed_like_count, 25)
+
+    def test_updating_comment_does_not_change_existing_observation(self):
+        """更新留言目前資料時，不可改變先前保存的抓取快照。"""
+
+        comment_observation = CommentObservation.objects.create(
+            fetch_run=self.fetch_run,
+            comment=self.comment_record,
+            observed_author_display_name="舊作者名稱",
+            observed_comment_text="舊留言內容",
+            observed_like_count=10,
+        )
+
+        self.comment_record.author_display_name = "新作者名稱"
+        self.comment_record.comment_text = "新留言內容"
+        self.comment_record.like_count = 25
+        self.comment_record.save()
+        comment_observation.refresh_from_db()
+
+        self.assertEqual(comment_observation.observed_author_display_name, "舊作者名稱")
+        self.assertEqual(comment_observation.observed_comment_text, "舊留言內容")
+        self.assertEqual(comment_observation.observed_like_count, 10)
+
+    def test_deleting_fetch_run_also_deletes_observations(self):
+        """刪除抓取紀錄時，所屬觀察紀錄應一起刪除。"""
+
+        CommentObservation.objects.create(
+            fetch_run=self.fetch_run,
+            comment=self.comment_record,
+            observed_comment_text="準備一起刪除的快照",
+        )
+
+        self.fetch_run.delete()
+
+        self.assertEqual(CommentObservation.objects.count(), 0)
+        self.assertTrue(Comment.objects.filter(id=self.comment_record.id).exists())
+
+    def test_deleting_comment_also_deletes_observations(self):
+        """刪除留言時，所屬觀察紀錄應一起刪除。"""
+
+        CommentObservation.objects.create(
+            fetch_run=self.fetch_run,
+            comment=self.comment_record,
+            observed_comment_text="準備一起刪除的快照",
+        )
+
+        self.comment_record.delete()
+
+        self.assertEqual(CommentObservation.objects.count(), 0)
+        self.assertTrue(FetchRun.objects.filter(id=self.fetch_run.id).exists())

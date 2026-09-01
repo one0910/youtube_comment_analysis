@@ -62,9 +62,9 @@ class Video(models.Model):
 
         return f"{self.video_title} ({self.youtube_video_id})"
 
-
 class AnalysisJob(models.Model):
     """保存一個影片留言抓取及 AI 分析任務的執行狀態。"""
+
     class DataSource(models.TextChoices):
         """這次任務使用哪一種 YouTube 資料來源。"""
 
@@ -273,3 +273,177 @@ class FetchRun(models.Model):
             f"第 {self.attempt_number} 次抓取 - "
             f"{self.get_status_display()}"
         )
+
+class Comment(models.Model):
+    """保存一則 YouTube 留言目前最新的內容與基本資料。"""
+
+    youtube_comment_id = models.CharField(
+        max_length=255,
+        unique=True,
+        verbose_name=gettext_lazy("YouTube 留言 ID"),
+    )
+
+    video = models.ForeignKey(
+        Video,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        verbose_name=gettext_lazy("影片"),
+    )
+
+    # 沒有 parent_comment 代表主留言；有值則代表回覆留言，
+    # 並由 parent_comment 指向被回覆的父留言。
+    parent_comment = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replies",
+        verbose_name=gettext_lazy("父留言"),
+    )
+
+    author_display_name = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=gettext_lazy("留言作者名稱"),
+    )
+
+    author_channel_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=gettext_lazy("留言作者頻道 ID"),
+    )
+
+    author_channel_url = models.URLField(
+        max_length=2048,
+        blank=True,
+        verbose_name=gettext_lazy("留言作者頻道網址"),
+    )
+
+    comment_text = models.TextField(
+        verbose_name=gettext_lazy("留言內容"),
+    )
+
+    like_count = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("按讚數"),
+    )
+
+    # API 可以提供的精確時間
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("YouTube 發布時間"),
+    )
+
+    # Selenium 畫面取得的「3 小時前」「1 天前」
+    published_time_text = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=gettext_lazy("YouTube 顯示時間文字"),
+    )
+
+    youtube_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("YouTube 更新時間"),
+    )
+
+    is_pinned = models.BooleanField(
+        default=False,
+        verbose_name=gettext_lazy("是否置頂"),
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=gettext_lazy("建立時間"),
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=gettext_lazy("更新時間"),
+    )
+
+    class Meta:
+        verbose_name = gettext_lazy("留言")
+        verbose_name_plural = gettext_lazy("留言")
+        ordering = ["published_at", "created_at"]
+
+    def __str__(self) -> str:
+        """顯示留言作者與截短後的留言內容。"""
+
+        author_name = self.author_display_name or gettext_lazy("未知作者")
+        single_line_comment_text = self.comment_text.strip().replace("\n", " ")
+
+        return f"{author_name}: {single_line_comment_text[:50]}"
+
+class CommentObservation(models.Model):
+    """保存某次抓取實際取得的一則留言資料快照。"""
+
+    fetch_run = models.ForeignKey(
+        FetchRun,
+        on_delete=models.CASCADE,
+        related_name="comment_observations",
+        verbose_name=gettext_lazy("留言抓取紀錄"),
+    )
+
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        related_name="observations",
+        verbose_name=gettext_lazy("留言"),
+    )
+
+    observed_author_display_name = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=gettext_lazy("抓取時的留言作者名稱"),
+    )
+
+    observed_comment_text = models.TextField(
+        verbose_name=gettext_lazy("抓取時的留言內容"),
+    )
+
+    observed_like_count = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("抓取時的按讚數"),
+    )
+
+    observed_published_time_text = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=gettext_lazy("抓取時的顯示時間文字"),
+    )
+
+    observed_youtube_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("抓取時的 YouTube 更新時間"),
+    )
+
+    observed_is_pinned = models.BooleanField(
+        default=False,
+        verbose_name=gettext_lazy("抓取時是否置頂"),
+    )
+
+    observed_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=gettext_lazy("觀察時間"),
+    )
+
+    class Meta:
+        verbose_name = gettext_lazy("留言觀察紀錄")
+        verbose_name_plural = gettext_lazy("留言觀察紀錄")
+        ordering = ["observed_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fetch_run", "comment"],
+                name="unique_comment_observation_per_fetch_run",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        """顯示抓取紀錄與留言的資料庫 ID。"""
+
+        return f"{self.fetch_run_id} - 留言 {self.comment_id}"

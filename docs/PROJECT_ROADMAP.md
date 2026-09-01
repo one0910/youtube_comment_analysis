@@ -106,13 +106,15 @@ YouTube 網址
 - [x] 設計 `Video`、`AnalysisJob`、`FetchRun` 模型。
 - [x] 建立、審查並套用上述模型的 migration。
 - [x] 將 `Video`、`AnalysisJob`、`FetchRun` 加入 Django Admin。
+- [x] 將 `Comment`、`CommentObservation` 加入 Django Admin。
 - [x] 建立影片預覽 DTO 與 `YouTubeProvider` 的影片預覽介面。
 - [x] 建立影片儲存 Service，重複檢查同一影片時更新既有 `Video`。
 - [x] 建立具 transaction 保護的任務建立 Service，同時建立 `AnalysisJob` 與第一筆 `FetchRun`。
-- [ ] 設計 `Comment` 模型，保存穩定留言 ID、作者、內容及父留言關係。
-- [ ] 設計 `CommentObservation`，記錄每次 `FetchRun` 看到的留言狀態。
+- [x] 設計 `Comment` 模型，保存穩定留言 ID、作者、內容及父留言關係。
+- [x] 設計 `CommentObservation`，記錄每次 `FetchRun` 看到的留言狀態。
 - [ ] 設計 `AnalysisResult`。
-- [ ] 建立並審查留言與分析結果模型的 migration。
+- [x] 建立、審查並套用留言與留言觀察紀錄模型的 migration。
+- [ ] 建立並審查分析結果模型的 migration。
 - [ ] 定義 `VideoData`、`CommentData`、`FetchOptions` DTO。
 - [ ] 擴充 `YouTubeProvider` 共用介面，支援留言分批抓取。
 - [ ] 建立 Fake Provider，先測試 Service，不連接外部網站。
