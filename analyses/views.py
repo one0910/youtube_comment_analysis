@@ -7,7 +7,7 @@ from django.shortcuts import (
     redirect,
     render,
 )
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.utils.translation import gettext as _
 from .models import AnalysisJob, Video
 from .services.analysis_job_creation_service import (
@@ -16,12 +16,14 @@ from .services.analysis_job_creation_service import (
 from .services.youtube_video_preview_service import (
     get_video_preview_with_selenium,
 )
-from .providers.youtube_provider import (
-    YouTubeVideoUnavailableError,
-)
 from .services.youtube_video_storage_service import (
     save_or_update_video_from_preview_data,
 )
+from .services.analysis_job_progress_service import build_analysis_stage_presentations
+from .providers.youtube_provider import (
+    YouTubeVideoUnavailableError,
+)
+
 
 def overview(request: HttpRequest) -> HttpResponse:
     """顯示 TubeSense AI 分析總覽。"""
@@ -132,6 +134,19 @@ def analysis_job_detail(request: HttpRequest, analysis_job_id) -> HttpResponse:
     context = {
         "page_title": _("分析進度"),
         "analysis_job": analysis_job,
+        "analysis_stages": build_analysis_stage_presentations(analysis_job=analysis_job),
     }
 
     return render(request,"analyses/analysis_job_detail.html",context)
+
+
+"""只回傳指定分析任務的進度區塊。"""
+@require_GET
+def analysis_job_progress(request: HttpRequest, analysis_job_id) -> HttpResponse:
+
+    analysis_job = get_object_or_404(AnalysisJob.objects.select_related("video"),id=analysis_job_id)
+    context = {
+        "analysis_job": analysis_job,
+        "analysis_stages": build_analysis_stage_presentations(analysis_job=analysis_job),
+    }
+    return render(request,"analyses/partials/analysis_job_progress_panel.html",context)

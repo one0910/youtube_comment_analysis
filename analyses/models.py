@@ -83,6 +83,15 @@ class AnalysisJob(models.Model):
         COMPLETED = "completed", gettext_lazy("已完成")
         FAILED = "failed", gettext_lazy("執行失敗")
         CANCELLED = "cancelled", gettext_lazy("已取消")
+    
+    """分析任務目前所在的流程階段。"""
+    class Stage(models.TextChoices):
+        VIDEO_CONFIRMATION = "video_confirmation", gettext_lazy("確認影片資料")
+        COMMENT_FETCHING = "comment_fetching", gettext_lazy("抓取留言")
+        COMMENT_NORMALIZATION = "comment_normalization", gettext_lazy("留言清理與正規化")
+        AI_ANALYSIS = "ai_analysis", gettext_lazy("AI 情緒與主題分析")
+        REPORT_GENERATION = "report_generation", gettext_lazy("建立洞察報告")
+    
 
     id = models.UUIDField(
         primary_key=True,
@@ -111,6 +120,14 @@ class AnalysisJob(models.Model):
         default=Status.PENDING,
         db_index=True,
         verbose_name=gettext_lazy("任務狀態"),
+    )
+    
+    current_stage = models.CharField(
+        max_length=30,
+        choices=Stage.choices,
+        default=Stage.COMMENT_FETCHING,
+        db_index=True,
+        verbose_name=gettext_lazy("目前分析階段"),
     )
 
     progress_percentage = models.PositiveSmallIntegerField(
@@ -167,18 +184,19 @@ class AnalysisJob(models.Model):
         )
 
 
+
+
 """保存一次 YouTube 留言資料抓取的執行紀錄。"""
 class FetchRun(models.Model):
 
+    """留言抓取目前的執行狀態。"""
     class Status(models.TextChoices):
-        """留言抓取目前的執行狀態。"""
-
         PENDING = "pending", gettext_lazy("等待處理")
         RUNNING = "running", gettext_lazy("抓取中")
         COMPLETED = "completed", gettext_lazy("抓取完成")
         FAILED = "failed", gettext_lazy("抓取失敗")
         CANCELLED = "cancelled", gettext_lazy("已取消")
-
+    
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -206,7 +224,7 @@ class FetchRun(models.Model):
         db_index=True,
         verbose_name=gettext_lazy("抓取狀態"),
     )
-
+    
     attempt_number = models.PositiveSmallIntegerField(
         default=1,
         verbose_name=gettext_lazy("第幾次抓取"),

@@ -44,6 +44,15 @@ def execute_youtube_fetch_run(
             youtube_provider=youtube_provider,
             fetch_options=fetch_options,
         )
+        
+        analysis_job.status = AnalysisJob.Status.RUNNING
+        analysis_job.current_stage = AnalysisJob.Stage.COMMENT_FETCHING
+        analysis_job.started_at = analysis_job.started_at or started_at
+        analysis_job.completed_at = None
+        analysis_job.error_message = ""
+        analysis_job.save(update_fields=["status", "current_stage", "started_at", "completed_at", "error_message", "updated_at"])
+        
+        
     except Exception as error:
         completed_at = timezone.now()
         error_message = str(error)
@@ -71,9 +80,10 @@ def execute_youtube_fetch_run(
     fetch_run.save(update_fields=["status", "fetched_comment_count", "completed_at", "error_code", "error_message", "updated_at"])
 
     analysis_job.status = AnalysisJob.Status.AWAITING_ANALYSIS
+    analysis_job.current_stage = AnalysisJob.Stage.AI_ANALYSIS
     analysis_job.completed_at = None
     analysis_job.error_message = ""
-    analysis_job.save(update_fields=["status", "completed_at", "error_message", "updated_at"])
+    analysis_job.save(update_fields=["status", "current_stage", "completed_at", "error_message", "updated_at"])
 
     return stored_comment_count
 

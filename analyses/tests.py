@@ -31,6 +31,10 @@ from .services.fetch_run_execution_service import (
     execute_youtube_fetch_run,
     execute_youtube_fetch_run_by_id,
 )
+from .services.analysis_job_progress_service import (
+    AnalysisStageState,
+    build_analysis_stage_presentations,
+)
 
 from .providers.youtube_provider import (
     YouTubeCommentData,
@@ -81,12 +85,14 @@ class VideoAndAnalysisJobModelTests(TestCase):
             video_comment_count=789,
         )
 
-    """新任務應使用 Selenium、等待處理及零進度。"""
+    """新任務應使用 Selenium、等待抓取留言且尚未開始執行。"""
     def test_analysis_job_uses_expected_defaults(self):
         analysis_job = AnalysisJob.objects.create(video=self.video_record)
         self.assertIsInstance(analysis_job.id, uuid.UUID)
         self.assertEqual(analysis_job.data_source,AnalysisJob.DataSource.SELENIUM)
         self.assertEqual(analysis_job.status,AnalysisJob.Status.PENDING)
+        self.assertEqual(analysis_job.current_stage,AnalysisJob.Stage.COMMENT_FETCHING)
+        self.assertEqual(analysis_job.get_current_stage_display(),"抓取留言")
         self.assertEqual(analysis_job.progress_percentage,0)
         self.assertEqual(analysis_job.error_message,"",)
         self.assertIsNone(analysis_job.started_at)
@@ -124,6 +130,39 @@ class VideoAndAnalysisJobModelTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Video.objects.create(youtube_video_id="dQw4w9WgXcQ",video_title="重複影片")
+
+
+"""測試分析任務資料轉換成五階段畫面狀態。"""
+class AnalysisJobProgressServiceTests(SimpleTestCase):
+
+    def test_pending_comment_fetch_displays_first_stage_completed_and_second_stage_current(self):
+        analysis_job = AnalysisJob(status=AnalysisJob.Status.PENDING,current_stage=AnalysisJob.Stage.COMMENT_FETCHING)
+        stage_presentations = build_analysis_stage_presentations(analysis_job=analysis_job)
+
+        self.assertEqual([stage.state for stage in stage_presentations],[AnalysisStageState.COMPLETED, AnalysisStageState.CURRENT, AnalysisStageState.WAITING, AnalysisStageState.WAITING, AnalysisStageState.WAITING])
+        self.assertEqual(stage_presentations[1].status_label,"準備中")
+
+    def test_running_normalization_displays_third_stage_in_progress(self):
+        analysis_job = AnalysisJob(status=AnalysisJob.Status.RUNNING,current_stage=AnalysisJob.Stage.COMMENT_NORMALIZATION)
+        stage_presentations = build_analysis_stage_presentations(analysis_job=analysis_job)
+
+        self.assertEqual([stage.state for stage in stage_presentations],[AnalysisStageState.COMPLETED, AnalysisStageState.COMPLETED, AnalysisStageState.CURRENT, AnalysisStageState.WAITING, AnalysisStageState.WAITING])
+        self.assertEqual(stage_presentations[2].status_label,"進行中")
+
+    def test_awaiting_ai_displays_ai_stage_as_current_and_waiting(self):
+        analysis_job = AnalysisJob(status=AnalysisJob.Status.AWAITING_ANALYSIS,current_stage=AnalysisJob.Stage.AI_ANALYSIS)
+        stage_presentations = build_analysis_stage_presentations(analysis_job=analysis_job)
+
+        self.assertEqual([stage.state for stage in stage_presentations],[AnalysisStageState.COMPLETED, AnalysisStageState.COMPLETED, AnalysisStageState.COMPLETED, AnalysisStageState.CURRENT, AnalysisStageState.WAITING])
+        self.assertEqual(stage_presentations[3].status_label,"等待中")
+
+    def test_failed_job_marks_current_stage_as_failed_and_keeps_future_stages_waiting(self):
+        analysis_job = AnalysisJob(status=AnalysisJob.Status.FAILED,current_stage=AnalysisJob.Stage.COMMENT_NORMALIZATION,error_message="模擬留言清理失敗")
+        stage_presentations = build_analysis_stage_presentations(analysis_job=analysis_job)
+
+        self.assertEqual([stage.state for stage in stage_presentations],[AnalysisStageState.COMPLETED, AnalysisStageState.COMPLETED, AnalysisStageState.FAILED, AnalysisStageState.WAITING, AnalysisStageState.WAITING])
+        self.assertEqual(stage_presentations[2].status_label,"失敗")
+        self.assertEqual(stage_presentations[2].description,"模擬留言清理失敗")
 
 
 """分析總覽頁面的基本測試。"""
@@ -1008,6 +1047,7 @@ class FetchRunExecutionServiceTests(TestCase):
         self.assertEqual(self.fetch_run.error_code, "")
         self.assertEqual(self.fetch_run.error_message, "")
         self.assertEqual(self.analysis_job.status, AnalysisJob.Status.AWAITING_ANALYSIS)
+        self.assertEqual(self.analysis_job.current_stage, AnalysisJob.Stage.AI_ANALYSIS)
         self.assertIsNotNone(self.analysis_job.started_at)
         self.assertIsNone(self.analysis_job.completed_at)
         self.assertEqual(self.analysis_job.error_message, "")
@@ -1028,6 +1068,7 @@ class FetchRunExecutionServiceTests(TestCase):
         self.assertIsNotNone(self.fetch_run.started_at)
         self.assertIsNotNone(self.fetch_run.completed_at)
         self.assertEqual(self.analysis_job.status, AnalysisJob.Status.FAILED)
+        self.assertEqual(self.analysis_job.current_stage, AnalysisJob.Stage.COMMENT_FETCHING)
         self.assertEqual(self.analysis_job.error_message, "模擬 Selenium 抓取失敗")
         self.assertIsNotNone(self.analysis_job.started_at)
         self.assertIsNotNone(self.analysis_job.completed_at)
@@ -1102,7 +1143,9 @@ class AnalysisJobStartViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response,"analyses/analysis_job_detail.html")
+        self.assertTemplateUsed(response,"analyses/partials/analysis_job_progress_panel.html")
         self.assertEqual(response.context["analysis_job"],analysis_job)
+        self.assertEqual([stage.state for stage in response.context["analysis_stages"]],[AnalysisStageState.COMPLETED, AnalysisStageState.CURRENT, AnalysisStageState.WAITING, AnalysisStageState.WAITING, AnalysisStageState.WAITING])
         self.assertContains(response, "準備分析的影片")
         self.assertContains(response, "Selenium")
         self.assertContains(response, "等待處理")
@@ -1119,6 +1162,27 @@ class AnalysisJobStartViewTests(TestCase):
         self.assertNotContains(response, "任務 ID")
         self.assertNotContains(response, "目前進度")
         self.assertNotContains(response, "0%")
+
+    def test_failed_job_detail_page_displays_failed_stage_and_error_message(self):
+        analysis_job = AnalysisJob.objects.create(video=self.video_record,status=AnalysisJob.Status.FAILED,current_stage=AnalysisJob.Stage.COMMENT_NORMALIZATION,error_message="模擬留言清理失敗")
+        response = self.client.get(reverse("analyses:analysis_job_detail",args=[analysis_job.id]))
+
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.context["analysis_stages"][2].state,AnalysisStageState.FAILED)
+        self.assertContains(response,"模擬留言清理失敗")
+        self.assertContains(response,"失敗")
+
+    def test_analysis_job_progress_endpoint_returns_only_progress_panel(self):
+        analysis_job = AnalysisJob.objects.create(video=self.video_record)
+        response = self.client.get(reverse("analyses:analysis_job_progress",args=[analysis_job.id]))
+
+        self.assertEqual(response.status_code,200)
+        self.assertTemplateUsed(response,"analyses/partials/analysis_job_progress_panel.html")
+        self.assertTemplateNotUsed(response,"analyses/analysis_job_detail.html")
+        self.assertTemplateNotUsed(response,"base.html")
+        self.assertEqual(response.context["analysis_job"],analysis_job)
+        self.assertEqual(len(response.context["analysis_stages"]),5)
+        self.assertContains(response,'id="analysis-job-progress-panel"')
 
 """測試留言抓取紀錄的資料庫規則。"""
 class FetchRunModelTests(TestCase):
@@ -1685,11 +1749,13 @@ class YouTubeFetchServiceTests(TestCase):
         )
 
         self.fetch_run.refresh_from_db()
+        self.analysis_job.refresh_from_db()
         parent_comment = Comment.objects.get(youtube_comment_id="UgzParent123")
         reply_comment = Comment.objects.get(youtube_comment_id="UgzReply123")
 
         self.assertEqual(fetched_comment_count, 3)
         self.assertEqual(self.fetch_run.fetched_comment_count, 3)
+        self.assertEqual(self.analysis_job.current_stage, AnalysisJob.Stage.COMMENT_NORMALIZATION)
         self.assertEqual(Comment.objects.count(), 3)
         self.assertEqual(CommentObservation.objects.count(), 3)
         self.assertEqual(reply_comment.parent_youtube_comment_id, "UgzParent123")

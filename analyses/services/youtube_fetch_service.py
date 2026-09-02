@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from analyses.models import Comment, CommentObservation, FetchRun, Video
+from analyses.models import AnalysisJob, Comment, CommentObservation, FetchRun, Video
 from analyses.providers.youtube_provider import (
     YouTubeCommentData,
     YouTubeCommentFetchOptions,
@@ -23,6 +23,7 @@ def fetch_and_store_youtube_comments(
     if fetch_options is None:
         fetch_options = YouTubeCommentFetchOptions()
 
+    analysis_job = fetch_run.analysis_job
     video_record = fetch_run.analysis_job.video
     observed_youtube_comment_ids: set[str] = set()
 
@@ -51,6 +52,9 @@ def fetch_and_store_youtube_comments(
 
             observed_youtube_comment_ids.add(single_comment_data.youtube_comment_id)
 
+
+        analysis_job.current_stage = AnalysisJob.Stage.COMMENT_NORMALIZATION
+        analysis_job.save(update_fields=["current_stage", "updated_at"])
 
         _resolve_unresolved_parent_comments(video_record=video_record)
 
