@@ -21,31 +21,39 @@
       </a>
 
       <nav class="mt-10 space-y-2" aria-label="{% translate '主要導覽' %}">
-        <a href="{% url 'analyses:overview' %}" 
-          class="flex items-center rounded-xl px-4 py-3 transition 
-                {% if request.resolver_match.url_name == 'overview' %}
-              bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
-                {% endif %}" 
-          {% if request.resolver_match.url_name == 'overview' %} aria-current="page" {% endif %}>
-            {% translate "分析總覽" %}
-        </a>
+          <a
+              href="{% url 'analyses:overview' %}"
+              class="flex items-center rounded-xl px-4 py-3 transition {% if request.resolver_match.url_name == 'overview' %}bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy{% endif %}"
+              {% if request.resolver_match.url_name == "overview" %}aria-current="page"{% endif %}
+          >
+              {% translate "分析總覽" %}
+          </a>
 
-        <a href="{% url 'analyses:new_analysis' %}" 
-          class="flex items-center rounded-xl px-4 py-3 transition 
-                {% if request.resolver_match.url_name == 'new_analysis' %}
-              bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
-                {% endif %}" 
-          {% if request.resolver_match.url_name == 'new_analysis' %} aria-current="page" {% endif %}>
-            {% translate "新增分析" %}
-        </a>
+          <a
+              href="{% url 'analyses:new_analysis' %}"
+              class="flex items-center rounded-xl px-4 py-3 transition {% if request.resolver_match.url_name == 'new_analysis' %}bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy{% endif %}"
+              {% if request.resolver_match.url_name == "new_analysis" %}aria-current="page"{% endif %}
+          >
+              {% translate "新增分析" %}
+          </a>
 
-        <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
-          {% translate "分析紀錄" %}
-        </span>
+          {% if request.resolver_match.url_name == "analysis_job_detail" %}
+              <a
+                  href="{% url 'analyses:analysis_job_detail' analysis_job.id %}"
+                  class="flex items-center rounded-xl bg-violet-100 px-4 py-3 font-semibold text-violet-950 transition"
+                  aria-current="page"
+              >
+                  {% translate "分析進度" %}
+              </a>
+          {% else %}
+              <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
+                  {% translate "分析進度" %}
+              </span>
+          {% endif %}
 
-        <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
-          {% translate "留言探索器" %}
-        </span>
+          <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
+              {% translate "查看分析報告" %}
+          </span>
       </nav>
 
       <div class="mt-auto border-t border-app-border pt-5">
@@ -77,33 +85,44 @@
               <path d="M4 6h16M4 12h16M4 18h16"></path>
             </svg>
           </summary>
+            <nav
+                class="absolute left-0 top-12 w-64 space-y-2 rounded-xl border border-app-border bg-app-surface p-3 shadow-lg"
+                aria-label="{% translate '手機導覽' %}"
+            >
+                <a
+                    href="{% url 'analyses:overview' %}"
+                    class="block rounded-lg px-4 py-3 transition {% if request.resolver_match.url_name == 'overview' %}bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy{% endif %}"
+                    {% if request.resolver_match.url_name == "overview" %}aria-current="page"{% endif %}
+                >
+                    {% translate "分析總覽" %}
+                </a>
 
-          <nav
-            class="absolute left-0 top-12 w-64 space-y-2 rounded-xl border border-app-border bg-app-surface p-3 shadow-lg"
-            aria-label="{% translate '手機導覽' %}"
-          >
-            <a href="{% url 'analyses:overview' %}" 
-            class="block rounded-lg px-4 py-3 transition 
-                  {% if request.resolver_match.url_name == 'overview' %}
-                  bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
-                  {% endif %}" 
-            {% if request.resolver_match.url_name == 'overview' %} aria-current="page" {% endif %}>
-                {% translate "分析總覽" %}
-            </a>
+                <a
+                    href="{% url 'analyses:new_analysis' %}"
+                    class="block rounded-lg px-4 py-3 transition {% if request.resolver_match.url_name == 'new_analysis' %}bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy{% endif %}"
+                    {% if request.resolver_match.url_name == "new_analysis" %}aria-current="page"{% endif %}
+                >
+                    {% translate "新增分析" %}
+                </a>
 
-          <a href="{% url 'analyses:new_analysis' %}" 
-          class="block rounded-lg px-4 py-3 transition 
-                {% if request.resolver_match.url_name == 'new_analysis' %}
-              bg-violet-100 font-semibold text-violet-950{% else %}text-slate-500 hover:bg-slate-100 hover:text-brand-navy
-                {% endif %}" 
-          {% if request.resolver_match.url_name == 'new_analysis' %} aria-current="page" {% endif %}>
-              {% translate "新增分析" %}
-          </a>
+                {% if request.resolver_match.url_name == "analysis_job_detail" %}
+                    <a
+                        href="{% url 'analyses:analysis_job_detail' analysis_job.id %}"
+                        class="block rounded-lg bg-violet-100 px-4 py-3 font-semibold text-violet-950"
+                        aria-current="page"
+                    >
+                        {% translate "分析進度" %}
+                    </a>
+                {% else %}
+                    <span class="block cursor-not-allowed rounded-lg px-4 py-3 text-slate-400" aria-disabled="true">
+                        {% translate "分析進度" %}
+                    </span>
+                {% endif %}
 
-            <span class="block cursor-not-allowed px-4 py-3 text-slate-400" aria-disabled="true">
-              {% translate "分析紀錄" %}
-            </span>
-          </nav>
+                <span class="block cursor-not-allowed rounded-lg px-4 py-3 text-slate-400" aria-disabled="true">
+                    {% translate "查看分析報告" %}
+                </span>
+            </nav>
         </details>
 
         <a href="{% url 'analyses:overview' %}" class="inline-flex items-center gap-2 font-bold">

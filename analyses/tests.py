@@ -1095,8 +1095,8 @@ class AnalysisJobStartViewTests(TestCase):
         self.assertEqual(AnalysisJob.objects.count(), 0)
 
 
-    """任務頁應顯示影片、狀態與進度。"""
-    def test_analysis_job_detail_page_displays_job(self):
+    """任務頁應顯示精簡影片資訊與五個靜態分析階段。"""
+    def test_analysis_job_detail_page_displays_static_progress_ui(self):
         analysis_job = AnalysisJob.objects.create(video=self.video_record)
         response = self.client.get(reverse("analyses:analysis_job_detail",args=[analysis_job.id]))
 
@@ -1104,8 +1104,21 @@ class AnalysisJobStartViewTests(TestCase):
         self.assertTemplateUsed(response,"analyses/analysis_job_detail.html")
         self.assertEqual(response.context["analysis_job"],analysis_job)
         self.assertContains(response, "準備分析的影片")
+        self.assertContains(response, "Selenium")
         self.assertContains(response, "等待處理")
-        self.assertContains(response, "0%")
+        self.assertContains(response, "1. 確認影片資料")
+        self.assertContains(response, "2. 抓取留言")
+        self.assertContains(response, "3. 留言清理與正規化")
+        self.assertContains(response, "4. AI 情緒與主題分析")
+        self.assertContains(response, "5. 建立洞察報告")
+        self.assertContains(response, f'href="{reverse("analyses:analysis_job_detail",args=[analysis_job.id])}"')
+        self.assertContains(response, 'aria-current="page"')
+        self.assertContains(response, "查看分析報告")
+        self.assertNotContains(response, "分析紀錄")
+        self.assertNotContains(response, "留言探索器")
+        self.assertNotContains(response, "任務 ID")
+        self.assertNotContains(response, "目前進度")
+        self.assertNotContains(response, "0%")
 
 """測試留言抓取紀錄的資料庫規則。"""
 class FetchRunModelTests(TestCase):

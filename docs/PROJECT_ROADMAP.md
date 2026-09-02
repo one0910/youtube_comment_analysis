@@ -2,7 +2,7 @@
 
 這份文件是 TubeSense AI 的共同開發依據，用來記錄與 Codex 協同開發時的目前位置、各階段目標、工作項目及完成條件。
 
-原則是先建立可執行、可測試的 Django 基礎，再完成資料模型、雙資料來源與可靠背景任務，最後才串接 AI、容器化和部署。每完成一個小階段就測試並 Commit，不一次堆疊大量未驗證功能。
+原則是先建立可執行、可測試的 Django 基礎，再以 Selenium 完成可操作的畫面與核心分析流程，最後才串接 AI、容器化和部署。YouTube Data API 與雙來源比較不阻擋 MVP，等核心流程完成後再評估。每完成一個小階段就測試並 Commit，不一次堆疊大量未驗證功能。
 
 MVP 的分析任務頁以「目前分析階段」為核心，不要求即時 Log、精確百分比或取消任務。這些不影響主要流程的功能統一保留在文件末尾的「可選開發功能」，等核心流程完成後再評估。
 
@@ -13,8 +13,8 @@ MVP 的分析任務頁以「目前分析階段」為核心，不要求即時 Log
 階段 1：Django 基礎          已完成
 階段 2：共用 UI 與新增分析    已完成
 階段 3：資料模型與 Provider   已完成
-階段 4：YouTube 雙來源        進行中  ← 目前位置
-階段 5：背景任務與進度頁      尚未進入（頁面骨架已完成）
+階段 4：Selenium 資料來源      MVP 核心已完成
+階段 5：背景任務與進度頁      進行中  ← 目前位置
 階段 6：AI 分析與報告頁       尚未開始
 階段 7：測試、安全與可觀測性  尚未開始
 階段 8：Docker 與 AWS 部署    尚未開始
@@ -31,7 +31,14 @@ YouTube 網址
     → 導向分析任務頁
 ```
 
-目前下一步是將既有 Selenium 留言抓取程式重構至 `SeleniumYouTubeProvider`，讓它依照共用介面逐筆輸出 `YouTubeCommentData`。
+目前 Selenium 已能抓取主留言與完整回覆、保存留言與觀察紀錄，並更新 `AnalysisJob`／`FetchRun` 的執行狀態。下一步是先完成分析任務頁的 MVP UI，再把建立任務、背景執行、狀態更新與頁面輪詢串成瀏覽器可操作的完整流程。
+
+目前瀏覽器流程的實際界線：
+
+```text
+已可測：輸入網址 → 影片預覽 → 建立 AnalysisJob／FetchRun → 導向分析任務頁
+尚未串接：分析任務建立後 → 背景執行 Selenium → 任務頁自動更新 → AI 分析 → 報告頁
+```
 
 ## 階段 0：專案與開發環境
 
@@ -91,7 +98,7 @@ YouTube 網址
 - [x] 驗證 Desktop 與 Mobile 不跑版。
 - [x] Template 文字使用可翻譯標記，為中英文切換保留能力。
 
-補充：Selenium／YouTube API 資料來源選擇延後至階段 4；目前 MVP 預設使用 Selenium，不阻擋階段 2 完成。
+補充：MVP 固定使用 Selenium。YouTube Data API、資料來源選擇及雙來源比較移至文件末尾的「可選開發功能」，不阻擋核心流程完成。
 
 完成條件：
 
@@ -125,40 +132,30 @@ YouTube 網址
 - 同一支影片重複執行不會重複建立相同留言。
 - 每次執行都能追蹤來源、時間、數量與錯誤。
 
-## 階段 4：YouTube 雙資料來源
+## 階段 4：Selenium 資料來源
 
-目標：YouTube Data API 與 Selenium 都能輸出相同資料格式，並可逐次選擇和比較。
-
-### YouTube Data API
-
-- [ ] 建立 Google Cloud 專案、API Key 與安全環境變數。
-- [ ] 實作影片資訊查詢。
-- [ ] 實作留言分頁與回覆留言查詢。
-- [ ] 處理 quota、留言關閉、私人影片與不存在影片。
-- [ ] 記錄 API 頁數、quota 相關資訊與執行時間。
+目標：先以 Selenium 完成可重複驗證的 YouTube 留言抓取與資料庫保存流程，作為 MVP 的唯一資料來源。
 
 ### Selenium
 
-- [ ] 將現有單機 Selenium 程式重構為 Provider。
-- [ ] 移除寫死的影片網址、ChromeDriver 路徑、`input()` 與終端機專用輸出。
+- [x] 將現有單機 Selenium 程式重構為 Provider。
+- [x] 移除寫死的影片網址、ChromeDriver 路徑、`input()` 與終端機專用輸出。
 - [ ] 支援 `managed`、`remote_debug`、`remote` 三種 Driver 模式。
-- [ ] 取得穩定留言 ID，保存父留言與回覆關係。
-- [ ] 將留言分批輸出，不等全部抓完才回傳。
-- [ ] 處理排序、懶載入、逾時、瀏覽器崩潰與 YouTube 版面變動。
+- [x] 取得穩定留言 ID，保存父留言與回覆關係。
+- [x] 將留言分批輸出，不等全部抓完才回傳。
+- [x] 處理熱門／最新排序、留言懶載入、回覆展開、多批「顯示更多回覆」及停止條件。
+- [x] 建立留言儲存 Service，保存 `Comment` 與每次抓取的 `CommentObservation`。
+- [x] 建立 `FetchRun` 執行 Service，保存執行中、完成及失敗狀態。
+- [x] 以真實 YouTube 影片完成 Selenium、回覆關聯、資料庫與生命週期 Smoke Test。
 - [ ] 建立可重現的 Selenium 測試影片清單。
-
-### 來源比較
-
-- [ ] 同一影片分別建立 API 與 Selenium `FetchRun`。
-- [ ] 在新增分析流程加入 Selenium／YouTube API 資料來源選擇，並保存至任務與抓取紀錄。
-- [ ] 比較留言總數、共同留言、單邊缺少留言、回覆完整度和時間。
-- [ ] 不在任務執行途中自動切換來源。
 
 完成條件：
 
-- 新任務可以明確選擇任一來源。
-- 兩個 Provider 都回傳相同 DTO。
-- 來源失敗時保留可理解的錯誤碼與錯誤訊息。
+- Selenium Provider 以共用 DTO 逐筆輸出主留言與回覆。
+- 同一支影片重複抓取不會重複建立留言，且每次抓取保留獨立快照。
+- 抓取成功或失敗時，`AnalysisJob` 與 `FetchRun` 保留可理解的狀態及錯誤資訊。
+
+`managed`、`remote_debug`、`remote` Driver 模式及正式環境強化仍需在部署前完成，但不阻擋目前進入畫面與背景任務整合。
 
 ## 階段 5：背景任務與分析進度頁
 
@@ -168,13 +165,24 @@ YouTube 網址
 - [x] 使用 POST 建立任務，GET 不會意外新增任務。
 - [ ] 在 `AnalysisJob` 建立可持久化的「目前分析階段」資料。
 - [ ] 加入 Redis 與 Celery。
-- [ ] 分離 `youtube_api`、`youtube_selenium`、`analysis` Queue。
+- [ ] 分離 `youtube_selenium` 與 `analysis` Queue。
 - [ ] Selenium Worker 初期 concurrency 設為 1。
 - [ ] 建立任務狀態與分析階段更新方式。
 - [ ] 實作重試、逾時與錯誤分類。
 - [ ] 依下方已定案規格完成頁面 3「分析進度」。
 - [ ] 使用 HTMX polling 更新任務狀態與分析階段。
 - [ ] 任務完成後導向報告頁。
+
+目前實作順序：
+
+```text
+1. 依已定案規格重做分析任務頁 UI
+2. 建立只回傳任務狀態區塊的 HTMX 端點與 polling
+3. 加入 Celery／Redis，讓 Selenium 不阻塞 Web Request
+4. 建立任務後派送第一筆 FetchRun
+5. 將抓取狀態與失敗原因即時反映到任務頁
+6. 串接 AI 分析與報告頁
+```
 
 ### 頁面 3 已定案的 MVP 規格
 
@@ -287,6 +295,20 @@ pending → running → awaiting_analysis → completed
 ## 可選開發功能：核心流程完成後再評估
 
 以下功能目前不做，也不列入 MVP 完成條件。接近專案完成時，依實際使用需求與剩餘時間決定是否加入。
+
+### YouTube Data API Provider 與雙來源比較
+
+- [ ] 建立 Google Cloud 專案、API Key 與安全環境變數。
+- [ ] 實作 YouTube Data API 影片資訊查詢。
+- [ ] 實作留言分頁與完整回覆留言查詢。
+- [ ] 處理 quota、留言關閉、私人影片與不存在影片。
+- [ ] 記錄 API 頁數、quota 相關資訊與執行時間。
+- [ ] 同一影片分別建立 API 與 Selenium `FetchRun`。
+- [ ] 在新增分析流程加入 Selenium／YouTube API 資料來源選擇，並保存至任務與抓取紀錄。
+- [ ] 比較留言總數、共同留言、單邊缺少留言、回覆完整度和時間。
+- [ ] 不在任務執行途中自動切換來源。
+
+MVP 固定使用 Selenium。這組功能會增加 API Key／quota 管理、分頁、錯誤分類、來源選擇及比較畫面的工作，因此等 Selenium、背景任務、AI 分析與報告頁都能完整操作後再評估。
 
 ### 分析任務即時 Log
 

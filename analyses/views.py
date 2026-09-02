@@ -130,7 +130,7 @@ def analysis_job_detail(request: HttpRequest, analysis_job_id) -> HttpResponse:
 
     analysis_job = get_object_or_404(AnalysisJob.objects.select_related("video"),id=analysis_job_id)
     context = {
-        "page_title": _("分析任務"),
+        "page_title": _("分析進度"),
         "analysis_job": analysis_job,
     }
 
