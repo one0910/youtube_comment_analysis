@@ -26,6 +26,7 @@ from .services.youtube_video_storage_service import (
 from .services.analysis_job_creation_service import (
     create_pending_analysis_job_for_video,
 )
+from .services.fetch_run_execution_service import execute_youtube_fetch_run
 
 from .providers.youtube_provider import (
     YouTubeCommentData,
@@ -975,6 +976,57 @@ class AnalysisJobCreationServiceTests(TestCase):
 
         self.assertEqual(AnalysisJob.objects.count(), 0)
         self.assertEqual(FetchRun.objects.count(), 0)
+
+
+"""測試留言抓取執行期間的任務狀態生命週期。"""
+class FetchRunExecutionServiceTests(TestCase):
+
+    def setUp(self):
+        self.video_record = Video.objects.create(youtube_video_id="dQw4w9WgXcQ", video_title="準備執行抓取的影片")
+        self.analysis_job = create_pending_analysis_job_for_video(video_record=self.video_record)
+        self.fetch_run = self.analysis_job.fetch_runs.get(attempt_number=1)
+        self.youtube_provider = MagicMock(spec=YouTubeProvider)
+        self.fetch_options = YouTubeCommentFetchOptions(maximum_comment_count=3)
+
+    @patch("analyses.services.fetch_run_execution_service.fetch_and_store_youtube_comments", return_value=3)
+    def test_successful_fetch_updates_job_and_fetch_run_statuses(self, mock_fetch_and_store):
+        """抓取成功後，FetchRun 應完成且 AnalysisJob 應等待 AI 分析。"""
+
+        stored_comment_count = execute_youtube_fetch_run(fetch_run=self.fetch_run, youtube_provider=self.youtube_provider, fetch_options=self.fetch_options)
+        self.fetch_run.refresh_from_db()
+        self.analysis_job.refresh_from_db()
+
+        self.assertEqual(stored_comment_count, 3)
+        self.assertEqual(self.fetch_run.status, FetchRun.Status.COMPLETED)
+        self.assertEqual(self.fetch_run.fetched_comment_count, 3)
+        self.assertIsNotNone(self.fetch_run.started_at)
+        self.assertIsNotNone(self.fetch_run.completed_at)
+        self.assertEqual(self.fetch_run.error_code, "")
+        self.assertEqual(self.fetch_run.error_message, "")
+        self.assertEqual(self.analysis_job.status, AnalysisJob.Status.AWAITING_ANALYSIS)
+        self.assertIsNotNone(self.analysis_job.started_at)
+        self.assertIsNone(self.analysis_job.completed_at)
+        self.assertEqual(self.analysis_job.error_message, "")
+        mock_fetch_and_store.assert_called_once_with(fetch_run=self.fetch_run, youtube_provider=self.youtube_provider, fetch_options=self.fetch_options)
+
+    @patch("analyses.services.fetch_run_execution_service.fetch_and_store_youtube_comments", side_effect=RuntimeError("模擬 Selenium 抓取失敗"))
+    def test_failed_fetch_saves_error_and_reraises_exception(self, mock_fetch_and_store):
+        """抓取失敗時，任務與抓取紀錄都應保存錯誤並重新拋出例外。"""
+
+        with self.assertRaisesRegex(RuntimeError, "模擬 Selenium 抓取失敗"):
+            execute_youtube_fetch_run(fetch_run=self.fetch_run, youtube_provider=self.youtube_provider, fetch_options=self.fetch_options)
+
+        self.fetch_run.refresh_from_db()
+        self.analysis_job.refresh_from_db()
+        self.assertEqual(self.fetch_run.status, FetchRun.Status.FAILED)
+        self.assertEqual(self.fetch_run.error_code, "RuntimeError")
+        self.assertEqual(self.fetch_run.error_message, "模擬 Selenium 抓取失敗")
+        self.assertIsNotNone(self.fetch_run.started_at)
+        self.assertIsNotNone(self.fetch_run.completed_at)
+        self.assertEqual(self.analysis_job.status, AnalysisJob.Status.FAILED)
+        self.assertEqual(self.analysis_job.error_message, "模擬 Selenium 抓取失敗")
+        self.assertIsNotNone(self.analysis_job.started_at)
+        self.assertIsNotNone(self.analysis_job.completed_at)
 
 
 """測試從網站建立分析任務的流程。"""
