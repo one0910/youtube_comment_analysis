@@ -26,7 +26,11 @@ from .services.youtube_video_storage_service import (
 from .services.analysis_job_creation_service import (
     create_pending_analysis_job_for_video,
 )
-from .services.fetch_run_execution_service import execute_youtube_fetch_run
+from .services.fetch_run_execution_service import (
+    YouTubeProviderUnavailableError,
+    execute_youtube_fetch_run,
+    execute_youtube_fetch_run_by_id,
+)
 
 from .providers.youtube_provider import (
     YouTubeCommentData,
@@ -1027,6 +1031,38 @@ class FetchRunExecutionServiceTests(TestCase):
         self.assertEqual(self.analysis_job.error_message, "模擬 Selenium 抓取失敗")
         self.assertIsNotNone(self.analysis_job.started_at)
         self.assertIsNotNone(self.analysis_job.completed_at)
+
+    @patch("analyses.services.fetch_run_execution_service.execute_youtube_fetch_run", return_value=3)
+    @patch("analyses.services.fetch_run_execution_service.SeleniumYouTubeProvider")
+    def test_fetch_run_id_selects_selenium_provider_and_executes_fetch(self, mock_selenium_provider_class, mock_execute_fetch_run):
+        """入口應由 FetchRun ID 載入資料並建立 Selenium Provider。"""
+
+        stored_comment_count = execute_youtube_fetch_run_by_id(fetch_run_id=str(self.fetch_run.id), fetch_options=self.fetch_options)
+
+        self.assertEqual(stored_comment_count, 3)
+        mock_selenium_provider_class.assert_called_once_with()
+        mock_execute_fetch_run.assert_called_once_with(fetch_run=self.fetch_run, youtube_provider=mock_selenium_provider_class.return_value, fetch_options=self.fetch_options)
+
+    @patch("analyses.services.fetch_run_execution_service.SeleniumYouTubeProvider")
+    def test_youtube_api_fetch_run_reports_provider_is_unavailable(self, mock_selenium_provider_class):
+        """YouTube API Provider 尚未完成時，應回報明確錯誤。"""
+
+        self.fetch_run.data_source = AnalysisJob.DataSource.YOUTUBE_API
+        self.fetch_run.save(update_fields=["data_source", "updated_at"])
+
+        with self.assertRaisesRegex(YouTubeProviderUnavailableError, "尚未實作"):
+            execute_youtube_fetch_run_by_id(fetch_run_id=self.fetch_run.id)
+
+        mock_selenium_provider_class.assert_not_called()
+
+    def test_unknown_data_source_is_rejected(self):
+        """資料來源值不受支援時，不可靜默改用其他 Provider。"""
+
+        self.fetch_run.data_source = "unknown_source"
+        self.fetch_run.save(update_fields=["data_source", "updated_at"])
+
+        with self.assertRaisesRegex(YouTubeProviderUnavailableError, "unknown_source"):
+            execute_youtube_fetch_run_by_id(fetch_run_id=self.fetch_run.id)
 
 
 """測試從網站建立分析任務的流程。"""
