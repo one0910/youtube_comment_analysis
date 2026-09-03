@@ -35,6 +35,7 @@ from .services.analysis_job_progress_service import (
     AnalysisStageState,
     build_analysis_stage_presentations,
 )
+from .tasks import execute_youtube_fetch_run_task
 
 from .providers.youtube_provider import (
     YouTubeCommentData,
@@ -47,11 +48,14 @@ from .providers.youtube_provider import (
 
 from .providers.fake_youtube_provider import FakeYouTubeProvider
 from .providers.selenium_youtube_provider import (
+    VIDEO_COMMENT_THREAD_SELECTOR,
     InvalidYouTubeCommentElementError,
     SeleniumYouTubeProvider,
     expand_comment_replies,
     get_comment_like_count,
+    get_loaded_top_level_comment_thread_elements,
     get_video_comment_count,
+    get_video_like_count,
     get_youtube_comment_data_from_element,
     get_youtube_comment_id_from_url,
     iter_loaded_reply_comment_data,
@@ -83,6 +87,7 @@ class VideoAndAnalysisJobModelTests(TestCase):
             ),
             video_view_count=123_456,
             video_comment_count=789,
+            video_like_count=3_608,
         )
 
     """新任務應使用 Selenium、等待抓取留言且尚未開始執行。"""
@@ -219,6 +224,7 @@ class NewAnalysisViewTests(TestCase):
             ),
             video_view_count=123_456,
             video_comment_count=789,
+            video_like_count=3_608,
         )
 
         mock_get_video_preview_with_selenium.return_value = (expected_video_preview_data)
@@ -243,6 +249,9 @@ class NewAnalysisViewTests(TestCase):
         self.assertEqual(saved_video_record.video_author_name,"測試頻道")
         self.assertEqual(saved_video_record.video_view_count,123_456)
         self.assertEqual(saved_video_record.video_comment_count,789)
+        self.assertEqual(saved_video_record.video_like_count,3_608)
+        self.assertContains(response,"按讚數")
+        self.assertContains(response,"3,608")
         self.assertContains(response, "開始分析留言")
         self.assertContains(response, reverse("analyses:start_analysis", args=[saved_video_record.id]))
 
@@ -338,6 +347,26 @@ class SeleniumYouTubeCommentCountTests(SimpleTestCase):
         mock_sleep.assert_called_once()
 
 
+"""測試 Selenium 從 YouTube 原生影片資料取得按讚數。"""
+class SeleniumYouTubeLikeCountTests(SimpleTestCase):
+
+    def test_reads_exact_like_count_from_player_response(self):
+        chrome_driver = MagicMock()
+        chrome_driver.execute_script.return_value = "3608"
+
+        actual_like_count = get_video_like_count(chrome_driver=chrome_driver)
+
+        self.assertEqual(actual_like_count,3_608)
+
+    def test_missing_like_count_returns_none(self):
+        chrome_driver = MagicMock()
+        chrome_driver.execute_script.return_value = None
+
+        actual_like_count = get_video_like_count(chrome_driver=chrome_driver)
+
+        self.assertIsNone(actual_like_count)
+
+
 """測試 Selenium 將單一 YouTube 留言元素轉成共用 DTO。"""
 class SeleniumYouTubeCommentElementTests(SimpleTestCase):
 
@@ -414,6 +443,25 @@ class SeleniumYouTubeCommentElementTests(SimpleTestCase):
 
 """測試 Selenium 逐筆轉換頁面中已載入的主留言。"""
 class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
+
+    def test_top_level_thread_selector_excludes_reply_sub_threads(self):
+        """回覆使用的 is-sub-thread 不可再次被當成主留言討論串。"""
+
+        self.assertIn(":not([is-sub-thread])",VIDEO_COMMENT_THREAD_SELECTOR)
+
+    def test_hidden_duplicate_comment_sections_are_ignored(self):
+        """YouTube 頁面中的隱藏留言區不可加入主留言掃描清單。"""
+
+        visible_comment_thread = MagicMock()
+        hidden_comment_thread = MagicMock()
+        visible_comment_thread.is_displayed.return_value = True
+        hidden_comment_thread.is_displayed.return_value = False
+        chrome_driver = MagicMock()
+        chrome_driver.find_elements.return_value = [visible_comment_thread,hidden_comment_thread]
+
+        comment_threads = get_loaded_top_level_comment_thread_elements(chrome_driver=chrome_driver)
+
+        self.assertEqual(comment_threads,[visible_comment_thread])
 
     @patch("analyses.providers.selenium_youtube_provider.get_youtube_comment_data_from_element")
     def test_loaded_top_level_comments_are_yielded_in_dom_order(self, mock_get_comment_data):
@@ -521,6 +569,26 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
 
 """測試 Selenium Provider 的主留言抓取入口。"""
 class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
+
+    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
+    @patch("analyses.providers.selenium_youtube_provider.select_comment_sort_order")
+    @patch("analyses.providers.selenium_youtube_provider.get_video_comment_count",return_value=2)
+    @patch("analyses.providers.selenium_youtube_provider.check_youtube_video_is_available")
+    @patch("analyses.providers.selenium_youtube_provider.create_local_chrome_driver")
+    def test_provider_never_yields_the_same_comment_id_twice(self,mock_create_driver,mock_check_video,mock_get_comment_count,mock_select_sort,mock_iter_comments):
+        """DOM 重複或重新渲染時，相同留言 ID 只能輸出一次。"""
+
+        chrome_driver = mock_create_driver.return_value
+        chrome_driver.find_elements.return_value = [MagicMock()]
+        first_comment_data = YouTubeCommentData(youtube_comment_id="UgzFirst123",youtube_video_id="dQw4w9WgXcQ",comment_text="第一則留言")
+        duplicated_comment_data = YouTubeCommentData(youtube_comment_id="UgzFirst123",youtube_video_id="dQw4w9WgXcQ",comment_text="第一則留言")
+        second_comment_data = YouTubeCommentData(youtube_comment_id="UgzSecond123",youtube_video_id="dQw4w9WgXcQ",comment_text="第二則留言")
+        mock_iter_comments.return_value = iter([first_comment_data,duplicated_comment_data,second_comment_data])
+
+        comment_data = list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ",fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2)))
+
+        self.assertEqual([comment.youtube_comment_id for comment in comment_data],["UgzFirst123","UgzSecond123"])
+        chrome_driver.quit.assert_called_once()
 
     @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
     @patch("analyses.providers.selenium_youtube_provider.select_comment_sort_order")
@@ -638,15 +706,18 @@ class SeleniumYouTubeCommentBatchLoadingTests(SimpleTestCase):
 
     @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
     def test_new_comment_batch_returns_true(self, mock_web_driver_wait):
-        """捲動後留言數量增加時應回傳 True。"""
+        """應捲到留言 continuation，並在留言數量增加時回傳 True。"""
 
         chrome_driver = MagicMock()
+        visible_continuation = MagicMock()
+        visible_continuation.is_displayed.return_value = True
+        chrome_driver.find_elements.return_value = [visible_continuation]
         mock_web_driver_wait.return_value.until.return_value = True
 
         new_comment_batch_loaded = load_next_comment_batch(chrome_driver=chrome_driver, previous_comment_thread_count=20)
 
         self.assertTrue(new_comment_batch_loaded)
-        chrome_driver.execute_script.assert_called_once()
+        chrome_driver.execute_script.assert_called_once_with("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",visible_continuation)
         mock_web_driver_wait.return_value.until.assert_called_once()
 
     @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
@@ -654,11 +725,29 @@ class SeleniumYouTubeCommentBatchLoadingTests(SimpleTestCase):
         """捲動後沒有增加留言時應回傳 False。"""
 
         chrome_driver = MagicMock()
+        visible_continuation = MagicMock()
+        visible_continuation.is_displayed.return_value = True
+        chrome_driver.find_elements.return_value = [visible_continuation]
         mock_web_driver_wait.return_value.until.side_effect = TimeoutException("模擬等待新留言逾時")
 
         new_comment_batch_loaded = load_next_comment_batch(chrome_driver=chrome_driver, previous_comment_thread_count=20)
 
         self.assertFalse(new_comment_batch_loaded)
+
+    @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
+    def test_missing_visible_comment_continuation_finishes_loading(self,mock_web_driver_wait):
+        """沒有可見的留言 continuation 時，代表已無下一批留言。"""
+
+        hidden_continuation = MagicMock()
+        hidden_continuation.is_displayed.return_value = False
+        chrome_driver = MagicMock()
+        chrome_driver.find_elements.return_value = [hidden_continuation]
+
+        new_comment_batch_loaded = load_next_comment_batch(chrome_driver=chrome_driver,previous_comment_thread_count=20)
+
+        self.assertFalse(new_comment_batch_loaded)
+        chrome_driver.execute_script.assert_not_called()
+        mock_web_driver_wait.assert_not_called()
 
 
 """測試 Selenium 展開一則主留言的回覆區。"""
@@ -932,6 +1021,7 @@ class YouTubeVideoStorageServiceTests(TestCase):
             ),
             video_view_count=123_456,
             video_comment_count=789,
+            video_like_count=3_608,
         )
 
         saved_video_record = save_or_update_video_from_preview_data(video_preview_data=video_preview_data)
@@ -940,6 +1030,7 @@ class YouTubeVideoStorageServiceTests(TestCase):
         self.assertEqual(saved_video_record.youtube_video_id,"dQw4w9WgXcQ")
         self.assertEqual(saved_video_record.video_title,"第一次取得的影片標題")
         self.assertEqual(saved_video_record.video_view_count,123_456)
+        self.assertEqual(saved_video_record.video_like_count,3_608)
 
     """再次取得同一支影片時，應更新原資料而不是新增第二筆。"""
     def test_existing_video_is_updated_instead_of_duplicated(self):
@@ -956,6 +1047,7 @@ class YouTubeVideoStorageServiceTests(TestCase):
             ),
             video_view_count=999_999,
             video_comment_count=1_234,
+            video_like_count=9_876,
         )
 
         saved_video_record = save_or_update_video_from_preview_data(video_preview_data=updated_video_preview_data)
@@ -965,6 +1057,7 @@ class YouTubeVideoStorageServiceTests(TestCase):
         self.assertEqual(saved_video_record.id,existing_video_record.id)
         self.assertEqual(existing_video_record.video_title, "更新後的影片標題")
         self.assertEqual(existing_video_record.video_comment_count,1_234)
+        self.assertEqual(existing_video_record.video_like_count,9_876)
 
 
 """測試建立分析任務的 Service。"""
@@ -1104,6 +1197,31 @@ class FetchRunExecutionServiceTests(TestCase):
 
         with self.assertRaisesRegex(YouTubeProviderUnavailableError, "unknown_source"):
             execute_youtube_fetch_run_by_id(fetch_run_id=self.fetch_run.id)
+
+
+"""測試 Celery 留言抓取任務的邊界。"""
+class YouTubeFetchTaskTests(SimpleTestCase):
+
+    def test_task_uses_expected_name_and_queue(self):
+        """Selenium 抓取任務應固定送往專用 Queue。"""
+
+        self.assertEqual(execute_youtube_fetch_run_task.name,"analyses.execute_youtube_fetch_run")
+        self.assertEqual(execute_youtube_fetch_run_task.queue,"youtube_selenium")
+        self.assertTrue(execute_youtube_fetch_run_task.ignore_result)
+
+    @patch("analyses.tasks.execute_youtube_fetch_run_by_id",return_value=12)
+    def test_task_executes_fetch_run_by_id(self,mock_execute_fetch_run):
+        """Task 只傳遞 FetchRun ID，實際流程交由既有 Service 執行。"""
+
+        fetch_run_id = str(uuid.uuid4())
+        stored_comment_count = execute_youtube_fetch_run_task.run(fetch_run_id=fetch_run_id,maximum_comment_count=5)
+
+        self.assertEqual(stored_comment_count,12)
+        mock_execute_fetch_run.assert_called_once()
+        self.assertEqual(mock_execute_fetch_run.call_args.kwargs["fetch_run_id"],fetch_run_id)
+        self.assertEqual(mock_execute_fetch_run.call_args.kwargs["fetch_options"].maximum_comment_count,5)
+        self.assertTrue(mock_execute_fetch_run.call_args.kwargs["fetch_options"].include_replies)
+        self.assertEqual(mock_execute_fetch_run.call_args.kwargs["fetch_options"].sort_order,YouTubeCommentSortOrder.NEWEST)
 
 
 """測試從網站建立分析任務的流程。"""

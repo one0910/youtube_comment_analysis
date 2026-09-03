@@ -16,9 +16,11 @@ def save_or_update_video_from_preview_data(video_preview_data: YouTubeVideoPrevi
             # Provider 可能取不到作者與縮圖，Model 以空字串保存。
             "video_author_name": video_preview_data.video_author_name or "",
             "video_thumbnail_url": video_preview_data.video_thumbnail_url or "",
-
+            
             # 觀看數和留言數允許使用 None，表示目前無法取得。
             "video_view_count": video_preview_data.video_view_count,
+            "video_like_count": video_preview_data.video_like_count,
+            
             "video_comment_count": video_preview_data.video_comment_count
         },
     )

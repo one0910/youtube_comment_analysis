@@ -80,7 +80,6 @@
                 <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
                     <span>
                         {% translate "觀看數" %}
-
                         {% if video_preview_data.video_view_count is not None %}
                             {{ video_preview_data.video_view_count|intcomma }}
                         {% else %}
@@ -89,8 +88,16 @@
                     </span>
 
                     <span>
-                        {% translate "留言" %}
+                        {% translate "按讚數" %}
+                        {% if video_preview_data.video_like_count is not None %}
+                            {{ video_preview_data.video_like_count|intcomma }}
+                        {% else %}
+                            {% translate "無法取得" %}
+                        {% endif %}
+                    </span>
 
+                    <span>
+                        {% translate "留言" %}
                         {% if video_preview_data.video_comment_count is not None %}
                             {{ video_preview_data.video_comment_count|intcomma }}
                         {% else %}

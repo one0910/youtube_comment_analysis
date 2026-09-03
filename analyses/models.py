@@ -35,6 +35,12 @@ class Video(models.Model):
         blank=True,
         verbose_name=gettext_lazy("觀看數"),
     )
+    
+    video_like_count = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("按讚數"),
+    )
 
     video_comment_count = models.PositiveBigIntegerField(
         null=True,

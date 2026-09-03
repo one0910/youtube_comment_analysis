@@ -22,6 +22,7 @@ class YouTubeVideoPreviewData:
     video_thumbnail_url: str | None
     video_view_count: int | None
     video_comment_count: int | None
+    video_like_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,7 @@ class YouTubeProvider(ABC):
         self,
         youtube_video_id: str,
         fetch_options: YouTubeCommentFetchOptions,
+        video_like_count: int | None = None
     ) -> Iterator[YouTubeCommentData]:
         """逐筆回傳指定影片的 YouTube 留言資料。"""
 

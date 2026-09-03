@@ -29,11 +29,19 @@ VIDEO_INFORMATION_WAIT_SECONDS = 20
 COMMENT_REPLY_LOADING_WAIT_SECONDS = 10
 YOUTUBE_PLAYABILITY_OK_STATUS = "OK"
 
+
 VIDEO_TITLE_SELECTOR = 'meta[property="og:title"]'
 VIDEO_AUTHOR_SELECTOR = (
     'span[itemprop="author"] '
     'link[itemprop="name"]'
 )
+
+VIDEO_LIKE_COUNT_SELECTOR = (
+    'div[itemprop="interactionStatistic"] '
+    'meta[itemprop="interactionType"][content="https://schema.org/LikeAction"] + '
+    'meta[itemprop="userInteractionCount"]'
+)
+
 VIDEO_THUMBNAIL_SELECTOR = 'meta[property="og:image"]'
 VIDEO_COMMENT_COUNT_SELECTOR = (
     "ytd-comments-header-renderer "
@@ -65,7 +73,14 @@ COMMENT_SORT_OPTION_INDEX = {
 
 VIDEO_COMMENT_THREAD_SELECTOR = (
     "ytd-comments "
-    "ytd-comment-thread-renderer"
+    "ytd-item-section-renderer #contents "
+    "> ytd-comment-thread-renderer:not([is-sub-thread])"
+)
+
+VIDEO_COMMENT_CONTINUATION_SELECTOR = (
+    "ytd-comments "
+    "ytd-item-section-renderer #contents "
+    "> ytd-continuation-item-renderer"
 )
 
 TOP_LEVEL_COMMENT_SELECTOR = "#comment-container > #comment"
@@ -156,6 +171,19 @@ def get_youtube_comment_data_from_element(
     )
 
 
+"""取得目前可見留言區中的主留言討論串，排除回覆子討論串與隱藏區域。"""
+def get_loaded_top_level_comment_thread_elements(chrome_driver: WebDriver) -> list[WebElement]:
+
+    return [
+        comment_thread_element
+        for comment_thread_element in chrome_driver.find_elements(
+            By.CSS_SELECTOR,
+            VIDEO_COMMENT_THREAD_SELECTOR,
+        )
+        if comment_thread_element.is_displayed()
+    ]
+
+
 """依照 DOM 順序輸出已載入的主留言及其回覆。"""
 def iter_loaded_top_level_comment_data(
     chrome_driver: WebDriver,
@@ -166,7 +194,10 @@ def iter_loaded_top_level_comment_data(
 ) -> Iterator[YouTubeCommentData]:
     
 
-    comment_thread_elements = chrome_driver.find_elements(By.CSS_SELECTOR, VIDEO_COMMENT_THREAD_SELECTOR)[start_comment_thread_index:]
+    comment_thread_elements = get_loaded_top_level_comment_thread_elements(chrome_driver=chrome_driver)[start_comment_thread_index:]
+    
+    
+    
     yielded_comment_count = 0
 
     for comment_thread_element in comment_thread_elements:
@@ -179,7 +210,7 @@ def iter_loaded_top_level_comment_data(
 
         yield top_level_comment_data
         yielded_comment_count += 1
-
+        
         if maximum_comment_count is not None and yielded_comment_count >= maximum_comment_count:
             return
 
@@ -218,21 +249,29 @@ def iter_loaded_top_level_comment_data(
             if maximum_comment_count is not None and yielded_comment_count >= maximum_comment_count:
                 return
 
-"""捲到頁面底部並等待新的留言討論串載入。"""
-def load_next_comment_batch(
-    chrome_driver: WebDriver,
-    previous_comment_thread_count: int,
-) -> bool:
+"""捲到留言 continuation，等待下一批主留言載入。"""
+def load_next_comment_batch(chrome_driver: WebDriver,previous_comment_thread_count: int) -> bool:
+
+    continuation_elements = chrome_driver.find_elements(By.CSS_SELECTOR,VIDEO_COMMENT_CONTINUATION_SELECTOR)
+
+    visible_continuation = next(
+        (continuation_element for continuation_element in continuation_elements
+            if continuation_element.is_displayed()
+        ),
+        None,
+    )
+
+    if visible_continuation is None:
+        return False
 
     chrome_driver.execute_script(
-        "window.scrollTo(0, document.scrollingElement.scrollHeight);"
+        "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
+        visible_continuation,
     )
 
     try:
-        WebDriverWait(chrome_driver, COMMENT_BATCH_LOADING_WAIT_SECONDS).until(
-            lambda current_driver: len(
-                current_driver.find_elements(By.CSS_SELECTOR,VIDEO_COMMENT_THREAD_SELECTOR)
-            ) > previous_comment_thread_count
+        WebDriverWait(chrome_driver,COMMENT_BATCH_LOADING_WAIT_SECONDS).until(
+            lambda current_driver: len(get_loaded_top_level_comment_thread_elements(chrome_driver=current_driver)) > previous_comment_thread_count
         )
     except TimeoutException:
         return False
@@ -241,11 +280,7 @@ def load_next_comment_batch(
 
 
 """展開一則主留言的回覆區；沒有回覆按鈕時回傳 False。"""
-def expand_comment_replies(
-    chrome_driver: WebDriver,
-    comment_thread_element: WebElement,
-) -> bool:
-
+def expand_comment_replies(chrome_driver: WebDriver,comment_thread_element: WebElement) -> bool:
     reply_buttons = comment_thread_element.find_elements(By.CSS_SELECTOR,COMMENT_REPLY_BUTTON_SELECTOR)
 
     visible_reply_button = next(
@@ -422,6 +457,24 @@ def get_video_view_count( chrome_driver: WebDriver, wait: WebDriverWait) -> int:
     return int(video_view_count_text)
 
 
+"""從 YouTube 原生結構化資料取得精確按讚數；未公開時回傳 None。"""
+def get_video_like_count(chrome_driver: WebDriver) -> int | None:
+    video_like_count_text = chrome_driver.execute_script(
+        """
+        return document.querySelector(
+            'div[itemprop="interactionStatistic"] '
+            + 'meta[itemprop="interactionType"][content="https://schema.org/LikeAction"] + '
+            + 'meta[itemprop="userInteractionCount"]'
+        )?.getAttribute("content") || null;
+        """
+    )
+
+    if not video_like_count_text:
+        return None
+
+    return int(video_like_count_text)
+
+
 """捲動到留言區並取得留言總數；找不到時回傳 None。"""
 def get_video_comment_count(chrome_driver: WebDriver) -> int | None:
 
@@ -485,8 +538,9 @@ class SeleniumYouTubeProvider(YouTubeProvider):
                     attribute_name="content",
                 )
             )
-
+              
             video_view_count = get_video_view_count(chrome_driver=chrome_driver,wait=wait)
+            video_like_count = get_video_like_count(chrome_driver=chrome_driver)
             video_comment_count = get_video_comment_count(chrome_driver=chrome_driver)
 
             return YouTubeVideoPreviewData(
@@ -495,6 +549,7 @@ class SeleniumYouTubeProvider(YouTubeProvider):
                 video_author_name=video_author_name,
                 video_thumbnail_url=video_thumbnail_url,
                 video_view_count=video_view_count,
+                video_like_count=video_like_count,
                 video_comment_count=video_comment_count,
             )
         finally:
@@ -530,9 +585,14 @@ class SeleniumYouTubeProvider(YouTubeProvider):
             yielded_comment_count = 0
             processed_comment_thread_count = 0
             stalled_attempt_count = 0
+            seen_youtube_comment_ids: set[str] = set()
 
             while yielded_comment_count < target_comment_count:
-                loaded_comment_thread_count = len(chrome_driver.find_elements(By.CSS_SELECTOR, VIDEO_COMMENT_THREAD_SELECTOR))
+                loaded_comment_thread_count = len(
+                    get_loaded_top_level_comment_thread_elements(
+                        chrome_driver=chrome_driver,
+                    )
+                )
                 remaining_comment_count = target_comment_count - yielded_comment_count
 
                 for comment_data in iter_loaded_top_level_comment_data(
@@ -542,8 +602,16 @@ class SeleniumYouTubeProvider(YouTubeProvider):
                     start_comment_thread_index=processed_comment_thread_count,
                     include_replies=fetch_options.include_replies,
                 ):
+                    if comment_data.youtube_comment_id in seen_youtube_comment_ids:
+                        continue
+
+                    seen_youtube_comment_ids.add(comment_data.youtube_comment_id)
+
                     yield comment_data
                     yielded_comment_count += 1
+
+                    if yielded_comment_count >= target_comment_count:
+                        return
 
                 processed_comment_thread_count = loaded_comment_thread_count
 
