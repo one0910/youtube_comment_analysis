@@ -81,7 +81,7 @@
                     <span>
                         {% translate "觀看數" %}
                         {% if video_preview_data.video_view_count is not None %}
-                            {{ video_preview_data.video_view_count|intcomma }}
+                            {{ video_preview_data.video_view_count|intcomma:False }}
                         {% else %}
                             —
                         {% endif %}
@@ -90,7 +90,7 @@
                     <span>
                         {% translate "按讚數" %}
                         {% if video_preview_data.video_like_count is not None %}
-                            {{ video_preview_data.video_like_count|intcomma }}
+                            {{ video_preview_data.video_like_count|intcomma:False }}
                         {% else %}
                             {% translate "無法取得" %}
                         {% endif %}
@@ -99,7 +99,7 @@
                     <span>
                         {% translate "留言" %}
                         {% if video_preview_data.video_comment_count is not None %}
-                            {{ video_preview_data.video_comment_count|intcomma }}
+                            {{ video_preview_data.video_comment_count|intcomma:False }}
                         {% else %}
                             {% translate "無法取得" %}
                         {% endif %}

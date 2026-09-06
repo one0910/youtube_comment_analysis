@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}分析報告預覽 | TubeSense AI{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-5xl space-y-6">
+  <header>
+    <p class="text-sm font-semibold text-brand-purple">本機報告預覽 · 未寫入資料庫</p>
+    <h1 class="mt-3 text-3xl font-bold">留言分析報告</h1>
+    <p class="mt-3 leading-7 text-slate-600">{{ video_title }}</p>
+  </header>
+
+  <aside class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7">
+    {% if is_historical_prompt %}
+      歷史結果：{{ provider_response.prompt_version }}。
+      目前程式為 {{ current_prompt_version }}，這份報告尚未套用新版提示詞。
+    {% endif %}
+    這是 AI 草稿，內容仍需人工核對；驗證通過不代表所有解讀都正確。
+  </aside>
+
+  <div class="grid gap-4 sm:grid-cols-3">
+    <div class="rounded-2xl border border-app-border bg-white p-5">
+      <p class="text-sm text-slate-500">分析留言</p>
+      <p class="mt-2 text-3xl font-bold">{{ report.analyzed_comment_count|intcomma }}</p>
+    </div>
+    <div class="rounded-2xl border border-app-border bg-white p-5">
+      <p class="text-sm text-slate-500">主留言</p>
+      <p class="mt-2 text-3xl font-bold">{{ report.top_level_comment_count|intcomma }}</p>
+    </div>
+    <div class="rounded-2xl border border-app-border bg-white p-5">
+      <p class="text-sm text-slate-500">回覆</p>
+      <p class="mt-2 text-3xl font-bold">{{ report.reply_comment_count|intcomma }}</p>
+    </div>
+  </div>
+
+  <section class="rounded-2xl border border-app-border bg-white p-6 shadow-sm">
+    <h2 class="text-xl font-bold">整體摘要</h2>
+    <p class="mt-4 whitespace-pre-wrap break-words leading-8">{{ report.overall_summary }}</p>
+  </section>
+
+  <section class="rounded-2xl border border-app-border bg-white p-6 shadow-sm">
+    <h2 class="text-xl font-bold">情緒傾向</h2>
+    <p class="mt-2 text-sm text-slate-500">AI 估計，非逐則分類統計；不代表整體民意。</p>
+
+    {% if report.sentiment %}
+      <div class="mt-5 grid gap-3 sm:grid-cols-3">
+        <p class="rounded-xl bg-emerald-50 p-4 text-emerald-800">
+          正面 {{ report.sentiment.positive_percentage }}%
+        </p>
+        <p class="rounded-xl bg-slate-100 p-4 text-slate-700">
+          中立 {{ report.sentiment.neutral_percentage }}%
+        </p>
+        <p class="rounded-xl bg-rose-50 p-4 text-rose-800">
+          負面 {{ report.sentiment.negative_percentage }}%
+        </p>
+      </div>
+      <p class="mt-4 leading-8">{{ report.sentiment.overview }}</p>
+    {% else %}
+      <p class="mt-4 text-slate-600">此報告未提供情緒百分比。</p>
+    {% endif %}
+  </section>
+
+  <section class="rounded-2xl border border-app-border bg-white p-6 shadow-sm">
+    <h2 class="text-xl font-bold">主要議題</h2>
+
+    {% for panel in topic_panels %}
+      <article class="mt-5 border-t border-app-border pt-5">
+        <h3 class="font-semibold">{{ forloop.counter }}. {{ panel.topic.name }}</h3>
+        <p class="mt-2 leading-8">{{ panel.topic.summary }}</p>
+
+        <details class="mt-3">
+          <summary class="cursor-pointer text-sm text-brand-purple">查看引用原文</summary>
+          {% for comment in panel.evidence %}
+            <blockquote class="mt-3 rounded-xl bg-slate-50 p-4">
+              <p class="text-sm text-slate-500">{{ comment.author_display_name }}</p>
+              <p class="mt-2 whitespace-pre-wrap break-words leading-7">{{ comment.comment_text }}</p>
+            </blockquote>
+          {% empty %}
+            <p class="mt-2 text-sm text-slate-500">未提供引用。</p>
+          {% endfor %}
+        </details>
+      </article>
+    {% empty %}
+      <p class="mt-4 text-slate-500">未提供主題。</p>
+    {% endfor %}
+  </section>
+
+  <section class="rounded-2xl border border-app-border bg-white p-6 shadow-sm">
+    <h2 class="text-xl font-bold">代表留言</h2>
+
+    {% for comment in report.representative_comments %}
+      <article class="mt-5 border-t border-app-border pt-5">
+        <p class="font-semibold">{{ comment.author_display_name }}</p>
+        <p class="mt-1 text-sm text-slate-500">
+          按讚數 {{ comment.like_count|default_if_none:"未提供" }}
+        </p>
+        <blockquote class="mt-3 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-4 leading-7">{{ comment.excerpt }}</blockquote>
+        <p class="mt-3 leading-7">
+          <span class="font-semibold">AI 解讀：</span>{{ comment.interpretation }}
+        </p>
+      </article>
+    {% empty %}
+      <p class="mt-4 text-slate-500">未提供代表留言。</p>
+    {% endfor %}
+  </section>
+
+  <section class="rounded-2xl border border-app-border bg-white p-6 shadow-sm">
+    <h2 class="text-xl font-bold">重複內容觀察</h2>
+    <p class="mt-2 text-sm leading-7 text-slate-500">
+      由程式統計：同一顯示名稱、合併空白後文字相同。
+      不代表相同帳號，也不能據此判定有組織操作。
+    </p>
+
+    {% for finding in report.repeated_content_findings %}
+      <details class="mt-4 rounded-xl border border-app-border p-4">
+        <summary class="cursor-pointer font-semibold">
+          {{ finding.author_display_name }} · {{ finding.occurrence_count }} 次
+        </summary>
+        <p class="mt-3 whitespace-pre-wrap break-words leading-7">{{ finding.repeated_text }}</p>
+      </details>
+    {% empty %}
+      <p class="mt-4 text-slate-500">沒有符合目前規則的重複內容。</p>
+    {% endfor %}
+  </section>
+
+  {% for section in text_sections %}
+    <section class="rounded-2xl border border-app-border bg-white p-6 shadow-sm">
+      <h2 class="text-xl font-bold">{{ section.title }}</h2>
+      <ul class="mt-4 list-disc space-y-3 pl-5 leading-7">
+        {% for item in section.items %}
+          <li class="break-words">{{ item }}</li>
+        {% empty %}
+          <li>未提供。</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endfor %}
+
+  <footer class="break-words text-sm leading-7 text-slate-500">
+    模型 {{ provider_response.model_name }} · Prompt {{ provider_response.prompt_version }}<br>
+    Token：輸入 {{ provider_response.usage.prompt_tokens|intcomma }} /
+    輸出 {{ provider_response.usage.completion_tokens|intcomma }} /
+    合計 {{ provider_response.usage.total_tokens|intcomma }}
+  </footer>
+</section>
+{% endblock %}

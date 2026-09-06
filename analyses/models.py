@@ -2,7 +2,7 @@ import uuid
 
 from django.db import models
 from django.utils.translation import gettext_lazy
-
+from django.core.exceptions import ValidationError
 
 class Video(models.Model):
     """保存已確認過的 YouTube 影片基本資料。"""
@@ -188,8 +188,6 @@ class AnalysisJob(models.Model):
             f"{self.video.video_title} - "
             f"{self.get_status_display()}"
         )
-
-
 
 
 """保存一次 YouTube 留言資料抓取的執行紀錄。"""
@@ -409,8 +407,10 @@ class Comment(models.Model):
 
         return f"{author_name}: {single_line_comment_text[:50]}"
 
+
+"""保存某次抓取實際取得的一則留言資料快照。"""
 class CommentObservation(models.Model):
-    """保存某次抓取實際取得的一則留言資料快照。"""
+
 
     fetch_run = models.ForeignKey(
         FetchRun,
@@ -475,7 +475,152 @@ class CommentObservation(models.Model):
             ),
         ]
 
+    """顯示抓取紀錄與留言的資料庫 ID。"""
     def __str__(self) -> str:
-        """顯示抓取紀錄與留言的資料庫 ID。"""
 
         return f"{self.fetch_run_id} - 留言 {self.comment_id}"
+
+
+"""保存一次 AI 留言分析產生的結構化結果。"""
+class AnalysisResult(models.Model):
+    class AnalysisMode(models.TextChoices):
+        SMALL = "small", gettext_lazy("小型樣本")
+        MEDIUM = "medium", gettext_lazy("中型樣本")
+        LARGE = "large", gettext_lazy("大型樣本")
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name=gettext_lazy("分析結果 ID"),
+    )
+
+    analysis_job = models.ForeignKey(
+        AnalysisJob,
+        on_delete=models.CASCADE,
+        related_name="analysis_results",
+        verbose_name=gettext_lazy("分析任務"),
+    )
+
+    source_fetch_run = models.ForeignKey(
+        FetchRun,
+        on_delete=models.CASCADE,
+        related_name="analysis_results",
+        verbose_name=gettext_lazy("來源抓取紀錄"),
+    )
+
+    attempt_number = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name=gettext_lazy("第幾次分析"),
+    )
+
+    provider_name = models.CharField(
+        max_length=50,
+        verbose_name=gettext_lazy("AI Provider"),
+    )
+
+    model_name = models.CharField(
+        max_length=100,
+        verbose_name=gettext_lazy("AI 模型"),
+    )
+
+    prompt_version = models.CharField(
+        max_length=100,
+        verbose_name=gettext_lazy("Prompt 版本"),
+    )
+
+    schema_version = models.CharField(
+        max_length=100,
+        verbose_name=gettext_lazy("輸出 Schema 版本"),
+    )
+
+    analysis_mode = models.CharField(
+        max_length=20,
+        choices=AnalysisMode.choices,
+        verbose_name=gettext_lazy("分析模式"),
+    )
+
+    analyzed_comment_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name=gettext_lazy("分析留言數"),
+    )
+
+    top_level_comment_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name=gettext_lazy("主留言數"),
+    )
+
+    reply_comment_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name=gettext_lazy("回覆數"),
+    )
+
+    result_data = models.JSONField(
+        default=dict,
+        verbose_name=gettext_lazy("結構化分析結果"),
+    )
+
+    prompt_tokens = models.PositiveIntegerField(
+        default=0,
+        verbose_name=gettext_lazy("輸入 Token 數"),
+    )
+
+    completion_tokens = models.PositiveIntegerField(
+        default=0,
+        verbose_name=gettext_lazy("輸出 Token 數"),
+    )
+
+    total_tokens = models.PositiveIntegerField(
+        default=0,
+        verbose_name=gettext_lazy("總 Token 數"),
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=gettext_lazy("建立時間"),
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=gettext_lazy("更新時間"),
+    )
+
+    class Meta:
+        verbose_name = gettext_lazy("AI 分析結果")
+        verbose_name_plural = gettext_lazy("AI 分析結果")
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["analysis_job","attempt_number"],
+                name="unique_analysis_attempt_per_job",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(attempt_number__gte=1),
+                name="analysis_result_attempt_number_gte_1",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    analyzed_comment_count=(models.F("top_level_comment_count") + models.F("reply_comment_count")                    ),
+                ),
+                name="analysis_result_comment_counts_match",
+            ),
+        ]
+
+    """來源 FetchRun 必須屬於相同的 AnalysisJob。"""
+    def clean(self):
+        super().clean()
+
+        if (
+            self.analysis_job_id
+            and self.source_fetch_run_id
+            and self.source_fetch_run.analysis_job_id
+            != self.analysis_job_id
+        ):
+            raise ValidationError({"source_fetch_run": ("來源抓取紀錄必須屬於同一個分析任務。")})
+
+    def __str__(self) -> str:
+        return (
+            f"{self.analysis_job_id} - "
+            f"第 {self.attempt_number} 次 AI 分析 - "
+            f"{self.model_name}"
+        )

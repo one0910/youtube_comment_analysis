@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% load humanize l10n %}
+
+{% block title %}新版報告・{% if is_fixture %}模擬{% else %}真實資料{% endif %}預覽 | TubeSense AI{% endblock %}
+
+{% block content %}
+<article class="mx-auto max-w-7xl space-y-8 text-base leading-7 text-brand-navy">
+
+  <section class="grid gap-6 rounded-xl border border-app-border bg-white p-6 shadow-sm lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-center" aria-labelledby="report-title">
+    {% if is_fixture %}
+      <div class="relative flex aspect-video flex-col items-center justify-center gap-2 overflow-hidden rounded-lg bg-[radial-gradient(ellipse_at_20%_10%,#50446e,transparent_70%)] bg-slate-950 p-5 text-center text-white" role="img" aria-label="虛構影片示意圖，非真實影片縮圖">
+        <span class="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">TubeSense / Demo</span>
+        <span class="rounded-lg bg-red-700 px-4 py-2" aria-hidden="true">▶</span>
+        <strong class="text-2xl tracking-wide">AI × HUMAN</strong>
+        <span class="text-sm text-slate-200">自動化 · 判斷 · 查證</span>
+        <small class="absolute bottom-2 right-3 text-xs text-slate-300">示意封面</small>
+      </div>
+    {% else %}
+      <div class="aspect-video overflow-hidden rounded-lg bg-slate-950 shadow-sm">
+        <img class="h-full w-full object-cover" src="{{ report.video.thumbnail_url }}" alt="{{ report.video.title }}的影片縮圖" loading="lazy" referrerpolicy="no-referrer">
+      </div>
+    {% endif %}
+
+    <div class="min-w-0">
+      <p class="text-sm text-slate-500">
+        {{ report.video.channel_name|default_if_none:"頻道未知" }}
+        <span>· ID：{{ report.video.youtube_video_id }}</span>
+      </p>
+      <h1 class="mt-2 text-2xl font-bold leading-9 tracking-tight lg:text-3xl" id="report-title">{{ report.video.title }}</h1>
+      <dl class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-lg bg-slate-100 p-4">
+          <dt class="text-xs font-semibold text-slate-500">觀看次數</dt>
+          <dd class="mt-1 text-2xl font-bold tabular-nums">{{ report.video.view_count|default_if_none:"未知"|intcomma:False }}</dd>
+        </div>
+        <div class="rounded-lg bg-slate-100 p-4">
+          <dt class="text-xs font-semibold text-slate-500">分析留言</dt>
+          <dd class="mt-1 text-2xl font-bold tabular-nums">{{ report.sample.analyzed_comment_count|intcomma }} <small class="text-sm font-normal">則</small></dd>
+        </div>
+        <div class="rounded-lg bg-slate-100 p-4">
+          <dt class="text-xs font-semibold text-slate-500">主留言</dt>
+          <dd class="mt-1 text-2xl font-bold tabular-nums">{{ report.sample.top_level_comment_count|intcomma }} <small class="text-sm font-normal">則</small></dd>
+        </div>
+        <div class="rounded-lg bg-slate-100 p-4">
+          <dt class="text-xs font-semibold text-slate-500">回覆</dt>
+          <dd class="mt-1 text-2xl font-bold tabular-nums">{{ report.sample.reply_comment_count|intcomma }} <small class="text-sm font-normal">則</small></dd>
+        </div>
+      </dl>
+      <p class="mt-4 text-sm leading-6 text-slate-500">
+        影片按讚 {{ report.video.like_count|default_if_none:"未知"|intcomma:False }} ·
+        YouTube 顯示留言 {{ report.video.displayed_comment_count|default_if_none:"未知"|intcomma:False }} ·
+        片長 {{ report.video.duration_seconds|default_if_none:"未知" }}{% if report.video.duration_seconds != None %} 秒{% endif %} ·
+        發布時間 {{ report.video.published_at|default_if_none:"未知" }}
+      </p>
+    </div>
+  </section>
+
+  <aside class="flex items-start gap-3 rounded-xl bg-[#eae7e8] p-4 shadow-sm sm:p-5" data-testid="sample-notice">
+    <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-red-700 shadow-sm" aria-hidden="true">
+      <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18h6"></path>
+        <path d="M10 22h4"></path>
+        <path d="M8.2 14.5A6 6 0 1 1 15.8 14.5C14.7 15.3 14 16.2 14 18h-4c0-1.8-.7-2.7-1.8-3.5Z"></path>
+      </svg>
+    </span>
+    <div class="min-w-0">
+      <div class="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <strong class="text-red-700">統計樣本提示</strong>
+        <span class="text-slate-400" aria-hidden="true">•</span>
+        <span class="text-slate-700">{{ sample_mode_detail }}</span>
+      </div>
+      <p class="mt-1 text-sm leading-6 text-slate-800 sm:text-base sm:leading-7">
+        本次分析 <strong class="font-bold text-brand-navy">{{ report.sample.analyzed_comment_count }} 則留言</strong>（<strong class="font-bold text-brand-navy">{{ report.sample.top_level_comment_count }} 則主留言</strong>、<strong class="font-bold text-brand-navy">{{ report.sample.reply_comment_count }} 則回覆</strong>）
+      </p>
+    </div>
+  </aside>
+
+  <section class="rounded-xl border border-app-border bg-white p-6 shadow-sm lg:p-8" aria-labelledby="sentiment-title">
+    <header>
+      <span class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Sentiment Overview</span>
+      <h2 class="mt-2 text-2xl font-bold" id="sentiment-title">情緒分析概況</h2>
+      <p class="mt-2 text-sm text-slate-500">{% if report.sentiment %}{{ report.sentiment.notice }}{% else %}小型樣本，以文字描述為主。{% endif %}</p>
+    </header>
+    <p class="mt-6 text-lg leading-8 text-slate-700">{{ report.overall_summary }}</p>
+
+    <div class="mt-8 grid gap-8 {% if report.sentiment %}lg:grid-cols-5 lg:items-center{% endif %}">
+      {% if report.sentiment %}
+        <div class="rounded-xl bg-slate-100 p-6 lg:col-span-2">
+          <div class="relative mx-auto size-64" data-testid="sentiment-donut">
+            <svg class="size-full" viewBox="0 0 160 160" role="img" aria-label="AI 估計：正面 {{ report.sentiment.positive.percentage }}%、中立 {{ report.sentiment.neutral.percentage }}%、負面 {{ report.sentiment.negative.percentage }}%">
+              {% for row in sentiment_rows %}
+                <circle
+                  cx="80"
+                  cy="80"
+                  r="62"
+                  pathLength="100"
+                  fill="none"
+                  stroke="{{ row.color }}"
+                  stroke-width="17"
+                  stroke-dasharray="{{ row.category.percentage|unlocalize }} 100"
+                  stroke-dashoffset="{{ row.offset|unlocalize }}"
+                  transform="rotate(-90 80 80)"
+                ></circle>
+              {% endfor %}
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <strong class="text-4xl font-bold">{{ report.sentiment.positive.percentage }}%</strong>
+              <span class="mt-1 text-sm">正面語氣</span>
+              <small class="text-xs text-slate-500">AI 估計</small>
+            </div>
+          </div>
+          <div class="mt-5 flex flex-wrap justify-center gap-4 text-sm">
+            {% for row in sentiment_rows %}
+              <span><i class="mr-1 inline-block size-2 rounded-full" style="background:{{ row.color }}"></i>{{ row.label }} {{ row.category.percentage }}%</span>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="space-y-3 {% if report.sentiment %}lg:col-span-3{% endif %}">
+        {% for row in sentiment_rows %}
+          <div class="rounded-lg border-l-5 bg-slate-100 px-4 py-2" style="border-left-color:{{ row.color }}">
+            <h3 class="flex items-center justify-between font-semibold">
+              {{ row.label }}
+              <span class="tabular-nums">{{ row.category.percentage }}%</span>
+            </h3>
+            <p class="mt-2 text-base leading-7 text-slate-600">{{ row.category.description }}</p>
+          </div>
+        {% endfor %}
+        <div class="rounded-lg bg-slate-200 p-5 d-none hidden">
+          <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold">整體氛圍 · 分析草稿</span>
+          <p class="mt-3 text-base leading-8 text-slate-700">{{ report.atmosphere }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-xl border border-app-border bg-white p-6 shadow-sm lg:p-8" aria-labelledby="topics-title">
+    <header>
+      <span class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Core Discussions</span>
+      <h2 class="mt-2 text-2xl font-bold" id="topics-title"><span class="text-red-700">◎</span> 主要議題 / 核心脈絡拆解</h2>
+    </header>
+
+    {% for panel in topic_panels %}
+      <section class="mt-7 border-t border-app-border pt-7">
+        <h3 class="flex flex-wrap items-center gap-3 text-xl font-semibold">
+          <span class="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-800">議題 {{ forloop.counter|stringformat:"02d" }}</span>
+          {{ panel.item.name }}
+        </h3>
+        <p class="mt-2 text-base leading-7 text-slate-600">{{ panel.item.summary }}</p>
+        <div class="mt-6 grid gap-6 lg:grid-cols-12">
+          <div class="rounded-lg bg-slate-100 p-5 lg:col-span-5">
+            <h4 class="font-semibold">論述邏輯剖析</h4>
+            <p class="mt-3 text-base leading-8 text-slate-700">{{ panel.item.reasoning }}</p>
+          </div>
+          <div class="lg:col-span-7">
+            <h4 class="border-b border-app-border pb-3 font-semibold">代表留言</h4>
+            {% for comment in panel.evidence %}
+              <blockquote class="mt-4 flex items-start gap-4 border-l-4 py-1 pl-4 {% if forloop.first %}border-red-600{% else %}border-slate-300{% endif %}" data-testid="topic-evidence-row">
+                <p class="min-w-0 flex-1 whitespace-pre-wrap break-words text-base leading-7">{{ comment.comment_text }}</p>
+                <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap pt-0.5 text-sm font-semibold tabular-nums {% if forloop.first %}text-red-700{% else %}text-slate-700{% endif %}" data-testid="topic-evidence-like">
+                  <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M7 10v11"></path>
+                    <path d="M3 10h4v11H3z"></path>
+                    <path d="M7 19c2 1.3 4.1 2 6.5 2h3.2a2 2 0 0 0 1.9-1.4l2.2-7A2 2 0 0 0 18.9 10H14l.7-3.6A2.8 2.8 0 0 0 12 3l-5 7Z"></path>
+                  </svg>
+                  <span class="sr-only">按讚數</span>
+                  <span>{{ comment.like_count|default_if_none:"未知" }} 讚</span>
+                </span>
+              </blockquote>
+              <hr class="my-2 h-[1.5px] border-0 bg-[#e5e7eb40] {% if forloop.last %}hidden{% endif %}" data-testid="topic-evidence-divider" data-visible="{% if forloop.last %}false{% else %}true{% endif %}">
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    {% empty %}
+      <p class="mt-6 text-slate-500">目前沒有足夠資料列出核心議題。</p>
+    {% endfor %}
+  </section>
+
+  <section class="overflow-hidden rounded-xl border border-app-border bg-white shadow-sm" aria-labelledby="top-title">
+    <header class="p-4 sm:p-6 lg:p-8">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <span class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Comment Leaderboard</span>
+          <h2 class="mt-1 text-xl font-bold leading-7 sm:text-2xl" id="top-title">
+            <span class="lg:hidden">高讚數代表意見解讀（風向指標）</span>
+            <span class="hidden lg:inline">影片最高讚留言TOP5</span>
+          </h2>
+        </div>
+        <span class="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Top {{ report.top_liked_comments|length }} 代表</span>
+      </div>
+    </header>
+
+    <div class="space-y-2.5 px-4 pb-4 sm:px-6 sm:pb-6 lg:hidden" data-testid="mobile-leaderboard" role="list" aria-label="高讚留言卡片清單">
+      {% for comment in report.top_liked_comments %}
+        <article class="rounded-lg bg-slate-100 p-3 mb-3" data-testid="mobile-leaderboard-card" role="listitem">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold {% if forloop.first %}bg-red-700 text-white{% else %}bg-slate-200 text-slate-800{% endif %}">{{ forloop.counter }}</span>
+              <span class="min-w-0 truncate text-sm font-semibold" title="{{ comment.author_display_name }}">{{ comment.author_display_name }}</span>
+              {% if forloop.first %}<span class="hidden shrink-0 whitespace-nowrap rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-800 min-[360px]:inline-flex">本次最高讚</span>{% endif %}
+            </div>
+            <span class="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums {% if forloop.first %}text-red-700{% else %}text-slate-700{% endif %}" aria-label="按讚數 {{ comment.like_count|intcomma }}">👍 {{ comment.like_count|intcomma }} 讚</span>
+          </div>
+          <p class="mt-2 whitespace-pre-wrap break-words pl-8 text-sm font-medium leading-6 [overflow-wrap:anywhere]">{{ comment.comment_text }}</p>
+        </article>
+      {% empty %}
+        <p class="rounded-lg bg-slate-100 p-4 text-sm text-slate-500">沒有已知按讚數的留言可供排名。</p>
+      {% endfor %}
+    </div>
+
+    <div class="hidden lg:block" data-testid="desktop-leaderboard" role="region" aria-label="高讚留言表格">
+      <table class="w-full table-fixed border-collapse text-left text-sm">
+        <caption class="sr-only">本次樣本高讚留言排名、作者、讚數與原文</caption>
+        <colgroup>
+          <col class="w-20">
+          <col class="w-52">
+          <col class="w-32">
+          <col>
+        </colgroup>
+        <thead class="bg-slate-100 text-xs font-semibold text-slate-600">
+          <tr>
+            <th class="px-5 py-4" scope="col">排名</th>
+            <th class="px-5 py-4" scope="col">留言者</th>
+            <th class="px-5 py-4" scope="col">按讚數</th>
+            <th class="px-5 py-4" scope="col">留言訊息</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for comment in report.top_liked_comments %}
+            <tr class="border-t border-app-border {% if forloop.first %}bg-red-50/70{% endif %}">
+              <td class="whitespace-nowrap px-5 py-4 align-top">
+                <span class="inline-flex rounded-md px-2 py-1 text-xs font-bold {% if forloop.first %}bg-red-700 text-white{% else %}bg-slate-200{% endif %}" {% if forloop.first %}title="本次樣本最高讚"{% endif %}>#{{ forloop.counter }}</span>
+              </td>
+              <td class="break-all px-5 py-4 align-top font-semibold">{{ comment.author_display_name }}</td>
+              <td class="whitespace-nowrap px-5 py-4 align-top font-bold tabular-nums {% if forloop.first %}text-red-700{% endif %}">{{ comment.like_count|intcomma }} 讚</td>
+              <td class="whitespace-pre-wrap break-words px-5 py-4 align-top font-medium [overflow-wrap:anywhere]">{{ comment.comment_text }}</td>
+            </tr>
+          {% empty %}
+            <tr><td class="px-5 py-5" colspan="4">沒有已知按讚數的留言可供排名。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="rounded-xl border border-app-border bg-white p-6 shadow-sm lg:p-8" aria-labelledby="behavior-title">
+    <header>
+      <span class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Behavioral Observations</span>
+      <h2 class="mt-2 text-2xl font-bold" id="behavior-title">重複內容與活躍發言觀察</h2>
+      <p class="mt-2 text-sm leading-6 text-slate-500">{{ report.identity_notice }}</p>
+    </header>
+
+    <div class="mt-6 space-y-4">
+      {% for panel in behavior_panels %}
+        <div class="rounded-lg bg-slate-100 p-5">
+          <h3 class="text-lg font-semibold">{{ panel.item.title }}</h3>
+          <div class="mt-2 text-base leading-7 text-slate-600" data-testid="behavior-description-with-evidence">
+            <span>{{ panel.item.description }}</span>{% include 'analyses/partials/report_v2_evidence.html' with evidence=panel.evidence %}
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-slate-500">本次沒有列出行為解讀，不代表已證明不存在異常。</p>
+      {% endfor %}
+    </div>
+
+  </section>
+
+  <section class="rounded-xl border border-app-border bg-white p-6 shadow-sm lg:p-8" aria-labelledby="summary-title">
+    <header>
+      <span class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Summary &amp; Key Insights</span>
+      <h2 class="mt-2 text-2xl font-bold" id="summary-title">總結與核心觀察</h2>
+      <p class="mt-2 text-sm text-slate-500">分析草稿，內容仍需人工核對。</p>
+    </header>
+
+    <div class="mt-8 space-y-3">
+      {% for panel in conclusion_panels %}
+        <div class="rounded-lg bg-slate-100 p-5">
+          <h3 class="flex items-start gap-3 font-semibold">
+            <span class="inline-flex min-w-7 justify-center rounded bg-brand-navy px-2 py-1 text-xs text-white">{{ forloop.counter }}</span>
+            <span>{{ panel.item.title }}</span>
+          </h3>
+          <div class="mt-3 text-base leading-7 text-slate-600" data-testid="insight-description-with-evidence">
+            <span>{{ panel.item.description }}</span>{% include 'analyses/partials/report_v2_evidence.html' with evidence=panel.evidence %}
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-slate-500">本次未列出總結觀察。</p>
+      {% endfor %}
+    </div>
+  </section>
+</article>
+{% endblock %}
