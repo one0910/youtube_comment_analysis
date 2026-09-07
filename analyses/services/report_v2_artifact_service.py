@@ -1,57 +1,11 @@
-"""載入已驗證的 v2 Smoke Test 成品；不呼叫 API，也不寫入資料庫。"""
+"""將資料庫中的 v2 JSON 報告還原成受驗證的 DTO。"""
 
-import json
-from datetime import datetime
-from pathlib import Path
-
-from django.conf import settings
-
-from analyses.providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
 from analyses.providers.ai_report_v2 import (
     AIReportV2, DisplayNameActivityV2, IDENTITY_NOTICE, REPORT_SCHEMA_VERSION,
     SENTIMENT_METHOD, SENTIMENT_NOTICE, RepeatedTextGroupV2, ReportInsightV2,
     ReportProvenanceV2, ReportSampleV2, ReportTopicV2, ReportVideoV2,
     SentimentCategoryV2, SentimentEstimateV2, TopLikedCommentV2,
 )
-from .ai_report_preparation_service import prepare_report_facts, validate_report_source_facts
-
-
-REAL_SOURCE_FILENAME = "tubesense_deepseek_comments_with_preview_20260904_151210_578363.json"
-REAL_REPORT_FILENAME = "deepseek_report_v2_xtJBhAtpj1s_20260905_021050_749845.json"
-
-
-def load_real_report_preview():
-    """讀取固定的本機 Smoke Test 檔案，避免網址參數形成任意檔案讀取。"""
-    directory = Path(settings.BASE_DIR) / "temporary"
-    return load_report_v2_artifacts(directory / REAL_SOURCE_FILENAME, directory / REAL_REPORT_FILENAME)
-
-
-def load_report_v2_artifacts(source_path: Path, report_path: Path):
-    source = _read_json_object(source_path)
-    report = load_report_v2_payload(_read_json_object(report_path))
-    preview = _object(source, "preview")
-    summary = _object(source, "fetch_summary")
-    comments = tuple(
-        AICommentInput(
-            sequence=item["sequence"], youtube_comment_id=item["youtube_comment_id"],
-            parent_youtube_comment_id=item["parent_youtube_comment_id"], author_display_name=item["author"],
-            comment_text=item["comment_text"], like_count=item["like_count"],
-            published_time_text=item["published_time_text"], is_pinned=item["is_pinned"],
-        ) for item in _array(source, "comments")
-    )
-    request = AIAnalysisRequest(preview["youtube_video_id"], preview["video_title"], comments)
-    video = ReportVideoV2(
-        youtube_video_id=preview["youtube_video_id"], title=preview["video_title"],
-        channel_name=preview.get("video_author_name"), thumbnail_url=preview.get("video_thumbnail_url"),
-        view_count=preview.get("video_view_count"), like_count=preview.get("video_like_count"),
-        displayed_comment_count=preview.get("video_comment_count"),
-        captured_at=datetime.fromtimestamp(source_path.stat().st_mtime).astimezone().isoformat(),
-    )
-    facts = prepare_report_facts(
-        request, video, sort_order=summary["sort_order"], include_replies=summary["include_replies"],
-    )
-    validate_report_source_facts(report, facts)
-    return report, facts
 
 
 def load_report_v2_payload(payload: dict) -> AIReportV2:
@@ -148,13 +102,6 @@ def _load_activity(item):
 def _load_insight(item):
     _keys(item, {"title", "description", "evidence_comment_ids"}, "insight")
     return ReportInsightV2(**{**item, "evidence_comment_ids": _string_array(item, "evidence_comment_ids")})
-
-
-def _read_json_object(path: Path) -> dict:
-    value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError(f"{path.name} 頂層必須是 JSON object。")
-    return value
 
 
 def _object(owner: dict, key: str) -> dict:

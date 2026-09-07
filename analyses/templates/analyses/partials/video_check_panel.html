@@ -42,12 +42,12 @@
         </div>
     </form>
 
+    {# Selenium 無法取得影片時顯示錯誤卡片。 #}
     {% if video_preview_error %}
-        {# Selenium 無法取得影片時顯示錯誤卡片。 #}
         {% include "analyses/partials/video_preview_error.html" %}
 
+    {# Selenium 成功取得影片時顯示 Preview區塊。 #}
     {% elif video_preview_data %}
-        {# Selenium 成功取得影片時顯示 Preview。 #}
         <article class="mt-6 grid gap-4 rounded-xl border border-emerald-200 bg-white p-4 shadow-sm sm:grid-cols-[14rem_minmax(0,1fr)] sm:items-center">
             <div class="overflow-hidden rounded-lg bg-slate-100">
                 <img

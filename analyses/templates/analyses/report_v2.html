@@ -1,21 +1,13 @@
 {% extends "base.html" %}
 {% load humanize l10n %}
 
-{% block title %}{% if is_preview %}新版報告・{% if is_fixture %}模擬{% else %}真實資料{% endif %}預覽{% else %}影片分析報告{% endif %} | TubeSense AI{% endblock %}
+{% block title %}影片分析報告 | TubeSense AI{% endblock %}
 
 {% block content %}
 <article class="mx-auto max-w-7xl space-y-8 text-base leading-7 text-brand-navy">
 
   <section class="grid gap-6 rounded-xl border border-app-border bg-white p-6 shadow-sm lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-center" aria-labelledby="report-title">
-    {% if is_fixture %}
-      <div class="relative flex aspect-video flex-col items-center justify-center gap-2 overflow-hidden rounded-lg bg-[radial-gradient(ellipse_at_20%_10%,#50446e,transparent_70%)] bg-slate-950 p-5 text-center text-white" role="img" aria-label="虛構影片示意圖，非真實影片縮圖">
-        <span class="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">TubeSense / Demo</span>
-        <span class="rounded-lg bg-red-700 px-4 py-2" aria-hidden="true">▶</span>
-        <strong class="text-2xl tracking-wide">AI × HUMAN</strong>
-        <span class="text-sm text-slate-200">自動化 · 判斷 · 查證</span>
-        <small class="absolute bottom-2 right-3 text-xs text-slate-300">示意封面</small>
-      </div>
-    {% elif report.video.thumbnail_url %}
+    {% if report.video.thumbnail_url %}
       <div class="aspect-video overflow-hidden rounded-lg bg-slate-950 shadow-sm">
         <img class="h-full w-full object-cover" src="{{ report.video.thumbnail_url }}" alt="{{ report.video.title }}的影片縮圖" loading="lazy" referrerpolicy="no-referrer">
       </div>

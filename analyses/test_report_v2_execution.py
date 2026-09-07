@@ -140,8 +140,7 @@ class ReportV2ExecutionServiceTests(TestCase):
         response = self.client.get(reverse("analyses:analysis_report_detail", args=[self.job.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "analyses/report_v2_preview.html")
-        self.assertFalse(response.context["is_preview"])
+        self.assertTemplateUsed(response, "analyses/report_v2.html")
         self.assertEqual(response.context["report"], load_report_v2_payload(result.result_data))
         self.assertContains(response, "影片分析報告 | TubeSense AI")
         self.assertContains(response, 'data-testid="desktop-report-nav"')

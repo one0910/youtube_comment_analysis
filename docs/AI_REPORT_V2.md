@@ -162,7 +162,7 @@ JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因�
 python manage.py test analyses.test_report_v2 -v 2
 python manage.py test analyses.test_report_preparation -v 2
 python manage.py test analyses.test_deepseek_report_v2 -v 2
-python manage.py test analyses.test_report_v2_preview -v 2
+python manage.py test analyses.test_report_v2_presentation -v 2
 python manage.py test analyses.test_report_v2_artifact -v 2
 python manage.py test analyses.test_report_v2_execution -v 2
 python manage.py test analyses -v 1
@@ -170,16 +170,13 @@ python manage.py test analyses -v 1
 
 以上皆為離線測試，不呼叫 DeepSeek、不產生 API 費用。
 
-## 6. 新版模擬報告預覽
+## 6. 正式報告呈現
 
-- 中型樣本：`/analyses/reports/preview/v2/`（30 則虛構留言，20 主留言＋10 回覆）。
-- 小型樣本：`/analyses/reports/preview/v2/?sample=small`（3 則，無情緒圓環）。
-- 真實成品：`/analyses/reports/preview/v2/real/`（固定讀取已產生的 154 則留言 Smoke Test）。
-- 舊版 V1 預覽頁 `/analyses/reports/preview/` 已移除。
-- 兩個預覽頁皆為 DEBUG 限定、GET only、no-store；不接受外部路徑，也不呼叫 DeepSeek。
-- `report_v2_preview_service.py` 以固定虛構案例經 v2 parser 與來源驗證組裝報告，
-  回應來源標為 fixture，不宣稱來自真實 API。資料可以乾淨 checkout 後重現。
-- `report_v2_preview.html` 使用專案既有的 Tailwind v4 bundle 與現有 base/sidebar；已移除獨立的
+- 正式流程只透過 `/analyses/jobs/<analysis-job-id>/report/` 顯示已完成並經來源驗證的報告。
+- 開發階段使用的模擬與真實成品預覽 URL 已移除，不再暴露額外報告入口。
+- `report_v2_presentation_service.py` 只負責將已驗證的報告轉成畫面所需的 context。
+- 模擬資料已移至 `analyses/testing/report_v2_factory.py`，僅供離線測試使用，不對外提供路由。
+- `report_v2.html` 使用專案既有的 Tailwind v4 bundle 與現有 base/sidebar；已移除獨立的
   `report-v2.css`，避免維護兩套設計系統。沒有引入 Stitch 的 CDN Tailwind、固定頁面高度、
   隱藏 scrollbar 或未實作的操作。
 - 字級依 Stitch 規範調整：一般報告文字以 16px 為主、整體摘要 18px、區塊標題 20–24px，
@@ -187,7 +184,5 @@ python manage.py test analyses -v 1
 - 圓環與圖例顯示估計比例，不顯示分類筆數；議題、行為與總結可查看引用原文，
   高讚表格採緊湊單行並移除解讀展開，過長原文保留於可獨立橫向捲動的表格中。
   只調整顯示，資料格式中的 interpretation 仍保留，其他區塊待真實資料接入後再調整。
-- 頁面有醒目的模擬資料標記，影片封面為 CSS 示意圖，缺少的發布時間及片長顯示未知。
-- 真實成品頁由 `report_v2_artifact_service.py` 載入固定檔名，不接受網址傳入路徑；載入後會
-  還原嚴格 DTO，拒絕未知或遭竄改的衍生欄位，再以原始留言重算並比對 Preview、樣本、Top 5、
-  重複文字、活躍發言與引用 ID。此頁不再次呼叫 API、不寫入資料庫、僅在 DEBUG 開放。
+- 缺少的影片縮圖、發布時間及片長以未知狀態呈現，不自行補值。
+- `report_v2_artifact_service.py` 僅負責將資料庫內的 JSON 還原為嚴格 DTO，並拒絕未知或遭竄改的衍生欄位。

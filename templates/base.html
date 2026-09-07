@@ -51,7 +51,7 @@
               </span>
           {% endif %}
 
-          {% if request.resolver_match.url_name == "report_v2_preview" or request.resolver_match.url_name == "report_v2_real_preview" or request.resolver_match.url_name == "analysis_report_detail" %}
+          {% if request.resolver_match.url_name == "analysis_report_detail" %}
               <span class="flex items-center rounded-xl bg-violet-100 px-4 py-3 font-semibold text-violet-950" aria-current="page" data-testid="desktop-report-nav">
                   {% translate "查看分析報告" %}
               </span>
@@ -125,7 +125,7 @@
                     </span>
                 {% endif %}
 
-                {% if request.resolver_match.url_name == "report_v2_preview" or request.resolver_match.url_name == "report_v2_real_preview" or request.resolver_match.url_name == "analysis_report_detail" %}
+                {% if request.resolver_match.url_name == "analysis_report_detail" %}
                     <span class="block rounded-lg bg-violet-100 px-4 py-3 font-semibold text-violet-950" aria-current="page" data-testid="mobile-report-nav">
                         {% translate "查看分析報告" %}
                     </span>

@@ -3,18 +3,16 @@
 from copy import deepcopy
 from dataclasses import asdict
 import json
-from unittest.mock import patch
 
-from django.test import SimpleTestCase, override_settings
-from django.urls import reverse
+from django.test import SimpleTestCase
 
 from .services.report_v2_artifact_service import load_report_v2_payload
-from .services.report_v2_preview_service import build_report_preview_fixture
+from .testing.report_v2_factory import build_report_test_fixture
 
 
 class ReportV2ArtifactLoaderTests(SimpleTestCase):
     def setUp(self):
-        self.report, self.facts = build_report_preview_fixture()
+        self.report, self.facts = build_report_test_fixture()
         self.payload = json.loads(json.dumps(asdict(self.report), ensure_ascii=False))
 
     def test_round_trip_restores_validated_report(self):
@@ -40,31 +38,3 @@ class ReportV2ArtifactLoaderTests(SimpleTestCase):
         payload["topics"][0]["evidence_comment_ids"] = "demo-1"
         with self.assertRaises(ValueError):
             load_report_v2_payload(payload)
-
-
-@override_settings(DEBUG=True)
-class ReportV2RealPreviewTests(SimpleTestCase):
-    def setUp(self):
-        self.url = reverse("analyses:report_v2_real_preview")
-        self.report, self.facts = build_report_preview_fixture()
-
-    @patch("analyses.report_v2_views.load_real_report_preview")
-    def test_real_preview_renders_validated_artifact_without_api_call(self, load_artifact):
-        load_artifact.return_value = self.report, self.facts
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.context["is_fixture"])
-        self.assertContains(response, "新版報告・真實資料預覽")
-        self.assertNotContains(response, "模擬資料 · 未呼叫 DeepSeek API")
-        self.assertIn("no-store", response["Cache-Control"])
-
-    @patch("analyses.report_v2_views.load_real_report_preview", side_effect=ValueError("invalid"))
-    def test_invalid_artifact_is_not_rendered(self, load_artifact):
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-        load_artifact.assert_called_once_with()
-
-    @override_settings(DEBUG=False)
-    @patch("analyses.report_v2_views.load_real_report_preview")
-    def test_real_preview_is_disabled_outside_debug(self, load_artifact):
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-        load_artifact.assert_not_called()

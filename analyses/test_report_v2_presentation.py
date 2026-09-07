@@ -2,27 +2,48 @@ from dataclasses import replace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
-from django.urls import reverse
+from django.shortcuts import render
+from django.urls import NoReverseMatch, include, path, reverse
 
-from .services.report_v2_preview_service import build_report_preview_context, build_report_preview_fixture
+from . import urls as analyses_urls
+from .services.report_v2_presentation_service import build_report_context
+from .testing.report_v2_factory import build_report_test_fixture
 
 
-@override_settings(DEBUG=True)
-class ReportV2PreviewTests(SimpleTestCase):
+def report_template_test_view(request):
+    report, facts = build_report_test_fixture(small=request.GET.get("sample") == "small")
+    return render(request, "analyses/report_v2.html", build_report_context(report, facts))
+
+
+urlpatterns = [
+    path("", include(([
+        path("__test__/report/", report_template_test_view, name="analysis_report_detail"),
+        *analyses_urls.urlpatterns,
+    ], "analyses"), namespace="analyses")),
+]
+
+
+@override_settings(ROOT_URLCONF=__name__)
+class ReportV2PresentationTests(SimpleTestCase):
     def setUp(self):
-        self.url = reverse("analyses:report_v2_preview")
+        self.url = reverse("analyses:analysis_report_detail")
 
     @patch("analyses.providers.deepseek_report_v2_provider.DeepSeekReportV2Provider.analyze_report")
-    def test_preview_uses_fixture_without_api_or_database(self, analyze):
+    def test_report_template_uses_fixture_without_api_or_database(self, analyze):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "analyses/report_v2_preview.html")
-        self.assertTrue(response.context["is_fixture"])
-        self.assertContains(response, "新版報告・模擬預覽")
+        self.assertTemplateUsed(response, "analyses/report_v2.html")
+        self.assertContains(response, "影片分析報告 | TubeSense AI")
         self.assertEqual(response.context["report"].sample.analyzed_comment_count, 30)
         self.assertEqual([c.like_count for c in response.context["report"].top_liked_comments], [389, 150, 100, 72, 57])
         analyze.assert_not_called()
-        self.assertIn("no-store", response["Cache-Control"])
+
+    def test_development_preview_routes_are_removed(self):
+        for name in ("report_v2_preview", "report_v2_real_preview"):
+            with self.subTest(name=name), self.assertRaises(NoReverseMatch):
+                reverse(f"analyses:{name}")
+        self.assertEqual(self.client.get("/analyses/reports/preview/v2/").status_code, 404)
+        self.assertEqual(self.client.get("/analyses/reports/preview/v2/real/").status_code, 404)
 
     def test_all_report_sections_render(self):
         response = self.client.get(self.url)
@@ -99,7 +120,7 @@ class ReportV2PreviewTests(SimpleTestCase):
         self.assertNotContains(response, "Behavioral Observations")
 
     def test_small_context_caps_historical_insights_and_hides_behavior(self):
-        report, facts = build_report_preview_fixture(small=True)
+        report, facts = build_report_test_fixture(small=True)
         report = replace(
             report,
             topics=report.topics + (report.topics[0],),
@@ -107,45 +128,35 @@ class ReportV2PreviewTests(SimpleTestCase):
             behavior_insights=(report.conclusions[0],),
         )
 
-        context = build_report_preview_context(report, facts)
+        context = build_report_context(report, facts)
 
         self.assertEqual(len(context["topic_panels"]), 2)
         self.assertEqual(len(context["conclusion_panels"]), 2)
         self.assertEqual(context["behavior_panels"], [])
         self.assertFalse(context["show_behavior_section"])
 
-    @override_settings(DEBUG=False)
-    @patch("analyses.report_v2_views.build_report_preview_fixture")
-    def test_disabled_outside_debug_before_fixture_loading(self, fixture):
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-        fixture.assert_not_called()
-
-    def test_post_and_unknown_sample_rejected(self):
-        self.assertEqual(self.client.post(self.url).status_code, 405)
-        self.assertEqual(self.client.get(self.url, {"sample": "../../.env"}).status_code, 404)
-
     def test_render_escapes_analysis_and_source_text(self):
-        report, facts = build_report_preview_fixture()
+        report, facts = build_report_test_fixture()
         attack = '<script>alert("x")</script>'
         report = replace(report, overall_summary=attack)
-        with patch("analyses.report_v2_views.build_report_preview_fixture", return_value=(report, facts)):
+        with patch("analyses.test_report_v2_presentation.build_report_test_fixture", return_value=(report, facts)):
             response = self.client.get(self.url)
         self.assertNotContains(response, attack)
         self.assertContains(response, "&lt;script&gt;")
 
     def test_context_resolves_real_evidence_and_guards_source_facts(self):
-        report, facts = build_report_preview_fixture()
-        context = build_report_preview_context(report, facts)
+        report, facts = build_report_test_fixture()
+        context = build_report_context(report, facts)
         self.assertEqual(context["topic_panels"][0]["evidence"][0].comment_text, facts.request.comments[0].comment_text)
         self.assertEqual(context["report"].repeated_text_groups[0].occurrence_count, 2)
         with self.assertRaises(ValueError):
-            build_report_preview_context(replace(report, video=replace(report.video, view_count=999)), facts)
+            build_report_context(replace(report, video=replace(report.video, view_count=999)), facts)
 
     def test_context_replaces_historical_internal_refs_with_author_names(self):
-        report, facts = build_report_preview_fixture()
+        report, facts = build_report_test_fixture()
         topic = replace(report.topics[0], reasoning="c1 與 c2 都提到人工核對。")
 
-        context = build_report_preview_context(replace(report, topics=(topic,)), facts)
+        context = build_report_context(replace(report, topics=(topic,)), facts)
 
         reasoning = context["topic_panels"][0]["item"].reasoning
         self.assertEqual(reasoning, "@示範觀眾_01 與 @示範觀眾_02 都提到人工核對。")
@@ -153,16 +164,16 @@ class ReportV2PreviewTests(SimpleTestCase):
         self.assertNotIn("c2", reasoning)
 
     def test_topic_panels_show_at_most_three_representative_comments(self):
-        report, facts = build_report_preview_fixture()
+        report, facts = build_report_test_fixture()
         topic = replace(report.topics[0], evidence_comment_ids=("demo-1", "demo-2", "demo-3", "demo-4"))
-        context = build_report_preview_context(replace(report, topics=(topic,)), facts)
+        context = build_report_context(replace(report, topics=(topic,)), facts)
         self.assertEqual([comment.youtube_comment_id for comment in context["topic_panels"][0]["evidence"]],
                          ["demo-1", "demo-2", "demo-3"])
 
     def test_unknown_video_counts_are_displayed_as_unknown_not_none_or_zero(self):
-        report, facts = build_report_preview_fixture()
+        report, facts = build_report_test_fixture()
         video = replace(report.video, view_count=None, like_count=None, displayed_comment_count=None)
-        with patch("analyses.report_v2_views.build_report_preview_fixture", return_value=(replace(report, video=video), replace(facts, video=video))):
+        with patch("analyses.test_report_v2_presentation.build_report_test_fixture", return_value=(replace(report, video=video), replace(facts, video=video))):
             response = self.client.get(self.url)
         self.assertContains(response, "影片按讚 未知")
         self.assertContains(response, "YouTube 顯示留言 未知")

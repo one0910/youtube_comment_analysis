@@ -25,7 +25,7 @@ from .services.analysis_job_progress_service import build_analysis_stage_present
 from .providers.youtube_provider import (
     YouTubeVideoUnavailableError,
 )
-from .services.report_v2_preview_service import build_report_preview_context
+from .services.report_v2_presentation_service import build_report_context
 from .services.report_v2_result_service import ReportV2UnavailableError, load_latest_report_v2_for_job
 from .tasks import execute_youtube_fetch_run_task
 
@@ -168,6 +168,6 @@ def analysis_report_detail(request: HttpRequest, analysis_job_id) -> HttpRespons
         report, facts = load_latest_report_v2_for_job(analysis_job)
     except ReportV2UnavailableError:
         return HttpResponse("分析報告目前無法讀取。", status=404)
-    context = build_report_preview_context(report, facts, is_fixture=False, is_preview=False)
+    context = build_report_context(report, facts)
     context["analysis_job"] = analysis_job
-    return render(request, "analyses/report_v2_preview.html", context)
+    return render(request, "analyses/report_v2.html", context)
