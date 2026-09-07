@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load humanize l10n %}
 
-{% block title %}新版報告・{% if is_fixture %}模擬{% else %}真實資料{% endif %}預覽 | TubeSense AI{% endblock %}
+{% block title %}{% if is_preview %}新版報告・{% if is_fixture %}模擬{% else %}真實資料{% endif %}預覽{% else %}影片分析報告{% endif %} | TubeSense AI{% endblock %}
 
 {% block content %}
 <article class="mx-auto max-w-7xl space-y-8 text-base leading-7 text-brand-navy">
@@ -15,9 +15,15 @@
         <span class="text-sm text-slate-200">自動化 · 判斷 · 查證</span>
         <small class="absolute bottom-2 right-3 text-xs text-slate-300">示意封面</small>
       </div>
-    {% else %}
+    {% elif report.video.thumbnail_url %}
       <div class="aspect-video overflow-hidden rounded-lg bg-slate-950 shadow-sm">
         <img class="h-full w-full object-cover" src="{{ report.video.thumbnail_url }}" alt="{{ report.video.title }}的影片縮圖" loading="lazy" referrerpolicy="no-referrer">
+      </div>
+    {% else %}
+      <div class="flex aspect-video items-center justify-center rounded-lg bg-violet-50 text-brand-purple" aria-label="影片沒有可用縮圖">
+        <svg class="size-16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5.14v13.72a1 1 0 0 0 1.51.86l10.28-6.86a1 1 0 0 0 0-1.72L9.51 4.28A1 1 0 0 0 8 5.14Z"></path>
+        </svg>
       </div>
     {% endif %}
 
@@ -69,7 +75,7 @@
         <span class="text-slate-700">{{ sample_mode_detail }}</span>
       </div>
       <p class="mt-1 text-sm leading-6 text-slate-800 sm:text-base sm:leading-7">
-        本次分析 <strong class="font-bold text-brand-navy">{{ report.sample.analyzed_comment_count }} 則留言</strong>（<strong class="font-bold text-brand-navy">{{ report.sample.top_level_comment_count }} 則主留言</strong>、<strong class="font-bold text-brand-navy">{{ report.sample.reply_comment_count }} 則回覆</strong>）
+        本次分析 <strong class="font-bold text-brand-navy">{{ report.sample.analyzed_comment_count }} 則留言</strong>（含 <strong class="font-bold text-brand-navy">{{ report.sample.top_level_comment_count }} 則主留言</strong>、<strong class="font-bold text-brand-navy">{{ report.sample.reply_comment_count }} 則回覆</strong>）
       </p>
     </div>
   </aside>

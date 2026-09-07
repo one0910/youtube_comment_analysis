@@ -51,6 +51,10 @@ def fetch_and_store_youtube_comments(
             )
 
             observed_youtube_comment_ids.add(single_comment_data.youtube_comment_id)
+            _save_fetch_progress(
+                fetch_run=fetch_run,
+                fetched_comment_count=len(observed_youtube_comment_ids),
+            )
 
 
         analysis_job.current_stage = AnalysisJob.Stage.COMMENT_NORMALIZATION
@@ -70,6 +74,12 @@ def fetch_and_store_youtube_comments(
         )
 
     return len(observed_youtube_comment_ids)
+
+
+def _save_fetch_progress(fetch_run: FetchRun, fetched_comment_count: int) -> None:
+    """讓進度頁能在 Selenium 抓取期間讀到最新留言數。"""
+    fetch_run.fetched_comment_count = fetched_comment_count
+    FetchRun.objects.filter(pk=fetch_run.pk).update(fetched_comment_count=fetched_comment_count)
 
 
 """確認 Provider 回傳的留言屬於目前分析的影片。"""

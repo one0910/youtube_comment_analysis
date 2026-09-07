@@ -1,4 +1,4 @@
-"""新版報告契約；尚未接入 Provider、資料庫或前端，不取代 v1。"""
+"""正式影片分析報告使用的 V2 資料契約。"""
 
 from dataclasses import dataclass, field
 from datetime import datetime

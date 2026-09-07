@@ -119,13 +119,13 @@ API 中議題／洞察以 `evidence_comment_refs` 引用；Top 5 解讀用 `comm
   不自動重試產生報告，避免解析失敗後悄悄重複付費。網路錯誤向上拋出。
 - 回應 finish_reason 必須是 stop；截斷、拒絕或空回應不建立報告。
   未取得 Token 數使用 null，不偽裝成 0。版本、時間與影片統計由 Python 記錄。
-- 回傳 `AIReportV2`，**不是舊版 `AIProviderResponse`**，不可直接替換目前
-  `execute_ai_analysis()` 的 Provider；正式儲存與頁面串接是後續工作。
+- 回傳 `AIReportV2`，由 `report_v2_execution_service.py` 驗證後寫入 `AnalysisResult`；
+  舊版 `execute_ai_analysis()` 保留供舊契約測試，不再負責正式 V2 報告。
 
 JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因此保留嚴格的 Python 驗證。
 參考 [DeepSeek 官方 JSON Output 說明](https://api-docs.deepseek.com/guides/json_mode/)。
 
-## 4. 驗證邊界與後續工作
+## 4. 驗證邊界與正式執行流程
 
 本階段類別驗證：型別、非空文字、數量一致性、模式邊界、情緒百分比、
 清單格式、重複 ID、Top 5 排序／上限、時間格式。`asdict()` 可序列化成 JSON。
@@ -145,10 +145,15 @@ JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因�
 - `validate_report_source_facts(report, facts)` 比對影片、樣本、Top 5 名單及原文／作者／讚數、
   重複與活躍群組，以及各區塊引用 ID 是否屬於來源。AI 解讀文字的語意正確性仍非程式可保證。
 
-尚待下一階段實作與測試：
+正式流程已接入：
 
-1. 將 v2 結果正式存入資料庫，並由 Celery AI 任務產生，不再依賴 temporary 成品。
-2. 讓任務完成後的正式報告路由使用 v2；`analysis_job_detail.html` 仍只負責進度與轉址。
+1. `FetchRun` 永久保存排序方式、是否包含回覆與留言數量上限。
+2. Selenium Task 成功後排入 `ai_analysis` Queue，由 `DeepSeekReportV2Provider` 產生報告。
+3. `report_v2_execution_service.py` 重算來源事實、驗證報告並以
+   `comment-analysis-result-v2` 寫入 `AnalysisResult`；未知 Token 保存為 null。
+4. 進度頁每兩秒以 HTMX 更新；任務完成後導向
+   `/analyses/jobs/<analysis-job-id>/report/`，由資料庫還原並再次驗證報告。
+5. 失敗時停止輪詢並保存失敗階段；Celery 起始或後續 Queue 無法排入時也不會永久停在等待狀態。
 
 ## 5. 驗證指令
 
@@ -158,7 +163,8 @@ python manage.py test analyses.test_report_preparation -v 2
 python manage.py test analyses.test_deepseek_report_v2 -v 2
 python manage.py test analyses.test_report_v2_preview -v 2
 python manage.py test analyses.test_report_v2_artifact -v 2
-python manage.py test analyses.tests.DeepSeekAIProviderTests analyses.tests.AIReportPreviewViewTests -v 2
+python manage.py test analyses.test_report_v2_execution -v 2
+python manage.py test analyses -v 1
 ```
 
 以上皆為離線測試，不呼叫 DeepSeek、不產生 API 費用。
@@ -168,8 +174,8 @@ python manage.py test analyses.tests.DeepSeekAIProviderTests analyses.tests.AIRe
 - 中型樣本：`/analyses/reports/preview/v2/`（30 則虛構留言，20 主留言＋10 回覆）。
 - 小型樣本：`/analyses/reports/preview/v2/?sample=small`（3 則，無情緒圓環）。
 - 真實成品：`/analyses/reports/preview/v2/real/`（固定讀取已產生的 154 則留言 Smoke Test）。
-- 舊頁 `/analyses/reports/preview/` 不變；進度頁也不變。
-- DEBUG 限定、GET only、no-store；不接受外部路徑、不讀取 temporary、不查詢或寫入 DB。
+- 舊版 V1 預覽頁 `/analyses/reports/preview/` 已移除。
+- 兩個預覽頁皆為 DEBUG 限定、GET only、no-store；不接受外部路徑，也不呼叫 DeepSeek。
 - `report_v2_preview_service.py` 以固定虛構案例經 v2 parser 與來源驗證組裝報告，
   回應來源標為 fixture，不宣稱來自真實 API。資料可以乾淨 checkout 後重現。
 - `report_v2_preview.html` 使用專案既有的 Tailwind v4 bundle 與現有 base/sidebar；已移除獨立的
@@ -180,7 +186,6 @@ python manage.py test analyses.tests.DeepSeekAIProviderTests analyses.tests.AIRe
 - 圓環與圖例顯示估計比例，不顯示分類筆數；議題、行為與總結可查看引用原文，
   高讚表格採緊湊單行並移除解讀展開，過長原文保留於可獨立橫向捲動的表格中。
   只調整顯示，資料格式中的 interpretation 仍保留，其他區塊待真實資料接入後再調整。
-- 重新分析、匯出 CSV 按鈕明確 disabled；不是可用的正式功能。
 - 頁面有醒目的模擬資料標記，影片封面為 CSS 示意圖，缺少的發布時間及片長顯示未知。
 - 真實成品頁由 `report_v2_artifact_service.py` 載入固定檔名，不接受網址傳入路徑；載入後會
   還原嚴格 DTO，拒絕未知或遭竄改的衍生欄位，再以原始留言重算並比對 Preview、樣本、Top 5、

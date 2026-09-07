@@ -51,9 +51,15 @@
               </span>
           {% endif %}
 
-          <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
-              {% translate "查看分析報告" %}
-          </span>
+          {% if request.resolver_match.url_name == "report_v2_preview" or request.resolver_match.url_name == "report_v2_real_preview" or request.resolver_match.url_name == "analysis_report_detail" %}
+              <span class="flex items-center rounded-xl bg-violet-100 px-4 py-3 font-semibold text-violet-950" aria-current="page" data-testid="desktop-report-nav">
+                  {% translate "查看分析報告" %}
+              </span>
+          {% else %}
+              <span class="flex cursor-not-allowed items-center rounded-xl px-4 py-3 text-slate-400" aria-disabled="true">
+                  {% translate "查看分析報告" %}
+              </span>
+          {% endif %}
       </nav>
 
       <div class="mt-auto border-t border-app-border pt-5">
@@ -119,9 +125,15 @@
                     </span>
                 {% endif %}
 
-                <span class="block cursor-not-allowed rounded-lg px-4 py-3 text-slate-400" aria-disabled="true">
-                    {% translate "查看分析報告" %}
-                </span>
+                {% if request.resolver_match.url_name == "report_v2_preview" or request.resolver_match.url_name == "report_v2_real_preview" or request.resolver_match.url_name == "analysis_report_detail" %}
+                    <span class="block rounded-lg bg-violet-100 px-4 py-3 font-semibold text-violet-950" aria-current="page" data-testid="mobile-report-nav">
+                        {% translate "查看分析報告" %}
+                    </span>
+                {% else %}
+                    <span class="block cursor-not-allowed rounded-lg px-4 py-3 text-slate-400" aria-disabled="true">
+                        {% translate "查看分析報告" %}
+                    </span>
+                {% endif %}
             </nav>
         </details>
 

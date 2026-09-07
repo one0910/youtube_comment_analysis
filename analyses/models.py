@@ -200,6 +200,10 @@ class FetchRun(models.Model):
         COMPLETED = "completed", gettext_lazy("抓取完成")
         FAILED = "failed", gettext_lazy("抓取失敗")
         CANCELLED = "cancelled", gettext_lazy("已取消")
+
+    class SortOrder(models.TextChoices):
+        NEWEST = "newest", gettext_lazy("最新")
+        TOP = "top", gettext_lazy("熱門")
     
     id = models.UUIDField(
         primary_key=True,
@@ -237,6 +241,24 @@ class FetchRun(models.Model):
     fetched_comment_count = models.PositiveIntegerField(
         default=0,
         verbose_name=gettext_lazy("已取得留言數"),
+    )
+
+    sort_order = models.CharField(
+        max_length=10,
+        choices=SortOrder.choices,
+        default=SortOrder.NEWEST,
+        verbose_name=gettext_lazy("留言排序方式"),
+    )
+
+    include_replies = models.BooleanField(
+        default=True,
+        verbose_name=gettext_lazy("是否包含回覆"),
+    )
+
+    maximum_comment_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=gettext_lazy("留言數量上限"),
     )
 
     error_code = models.CharField(
@@ -284,6 +306,10 @@ class FetchRun(models.Model):
             models.CheckConstraint(
                 condition=models.Q(attempt_number__gte=1),
                 name="fetch_run_attempt_number_gte_1",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(maximum_comment_count__isnull=True) | models.Q(maximum_comment_count__gte=1),
+                name="fetch_run_maximum_comment_count_gte_1",
             ),
         ]
 
@@ -561,17 +587,20 @@ class AnalysisResult(models.Model):
     )
 
     prompt_tokens = models.PositiveIntegerField(
-        default=0,
+        null=True,
+        blank=True,
         verbose_name=gettext_lazy("輸入 Token 數"),
     )
 
     completion_tokens = models.PositiveIntegerField(
-        default=0,
+        null=True,
+        blank=True,
         verbose_name=gettext_lazy("輸出 Token 數"),
     )
 
     total_tokens = models.PositiveIntegerField(
-        default=0,
+        null=True,
+        blank=True,
         verbose_name=gettext_lazy("總 Token 數"),
     )
 

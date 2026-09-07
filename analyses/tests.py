@@ -49,7 +49,7 @@ from .services.ai_analysis_execution_service import (
     AIAnalysisResponseValidationError,
     execute_ai_analysis,
 )
-from .tasks import execute_youtube_fetch_run_task
+from .tasks import execute_report_v2_analysis_task, execute_youtube_fetch_run_task
 
 from .providers.youtube_provider import (
     YouTubeCommentData,
@@ -1119,6 +1119,26 @@ class AnalysisJobCreationServiceTests(TestCase):
         self.assertEqual(created_fetch_run.status, FetchRun.Status.PENDING)
         self.assertEqual(created_fetch_run.attempt_number, 1)
         self.assertEqual(created_fetch_run.fetched_comment_count, 0)
+        self.assertEqual(created_fetch_run.sort_order, FetchRun.SortOrder.NEWEST)
+        self.assertTrue(created_fetch_run.include_replies)
+        self.assertIsNone(created_fetch_run.maximum_comment_count)
+
+    def test_fetch_options_are_persisted_with_the_fetch_run(self):
+        fetch_options = YouTubeCommentFetchOptions(
+            sort_order=YouTubeCommentSortOrder.TOP,
+            include_replies=False,
+            maximum_comment_count=100,
+        )
+
+        analysis_job = create_pending_analysis_job_for_video(
+            video_record=self.video_record,
+            fetch_options=fetch_options,
+        )
+        fetch_run = analysis_job.fetch_runs.get()
+
+        self.assertEqual(fetch_run.sort_order, FetchRun.SortOrder.TOP)
+        self.assertFalse(fetch_run.include_replies)
+        self.assertEqual(fetch_run.maximum_comment_count, 100)
 
     """每次分析請求都應建立獨立任務與抓取紀錄。"""
     def test_each_analysis_request_creates_separate_job_and_fetch_run(self):
@@ -1210,6 +1230,21 @@ class FetchRunExecutionServiceTests(TestCase):
         mock_selenium_provider_class.assert_called_once_with()
         mock_execute_fetch_run.assert_called_once_with(fetch_run=self.fetch_run, youtube_provider=mock_selenium_provider_class.return_value, fetch_options=self.fetch_options)
 
+    @patch("analyses.services.fetch_run_execution_service.execute_youtube_fetch_run", return_value=3)
+    @patch("analyses.services.fetch_run_execution_service.SeleniumYouTubeProvider")
+    def test_fetch_run_id_rebuilds_persisted_fetch_options(self, mock_selenium_provider_class, mock_execute_fetch_run):
+        self.fetch_run.sort_order = FetchRun.SortOrder.TOP
+        self.fetch_run.include_replies = False
+        self.fetch_run.maximum_comment_count = 100
+        self.fetch_run.save(update_fields=["sort_order", "include_replies", "maximum_comment_count", "updated_at"])
+
+        execute_youtube_fetch_run_by_id(fetch_run_id=self.fetch_run.id)
+
+        fetch_options = mock_execute_fetch_run.call_args.kwargs["fetch_options"]
+        self.assertEqual(fetch_options.sort_order, YouTubeCommentSortOrder.TOP)
+        self.assertFalse(fetch_options.include_replies)
+        self.assertEqual(fetch_options.maximum_comment_count, 100)
+
     @patch("analyses.services.fetch_run_execution_service.SeleniumYouTubeProvider")
     def test_youtube_api_fetch_run_reports_provider_is_unavailable(self, mock_selenium_provider_class):
         """YouTube API Provider 尚未完成時，應回報明確錯誤。"""
@@ -1242,19 +1277,44 @@ class YouTubeFetchTaskTests(SimpleTestCase):
         self.assertEqual(execute_youtube_fetch_run_task.queue,"youtube_selenium")
         self.assertTrue(execute_youtube_fetch_run_task.ignore_result)
 
+    @patch("analyses.tasks.execute_report_v2_analysis_task.delay")
     @patch("analyses.tasks.execute_youtube_fetch_run_by_id",return_value=12)
-    def test_task_executes_fetch_run_by_id(self,mock_execute_fetch_run):
-        """Task 只傳遞 FetchRun ID，實際流程交由既有 Service 執行。"""
+    def test_task_executes_fetch_and_dispatches_v2_analysis(self,mock_execute_fetch_run, mock_ai_delay):
+        """抓取成功後才把同一筆 FetchRun 交給 V2 AI Task。"""
 
         fetch_run_id = str(uuid.uuid4())
-        stored_comment_count = execute_youtube_fetch_run_task.run(fetch_run_id=fetch_run_id,maximum_comment_count=5)
+        stored_comment_count = execute_youtube_fetch_run_task.run(fetch_run_id=fetch_run_id)
 
         self.assertEqual(stored_comment_count,12)
-        mock_execute_fetch_run.assert_called_once()
-        self.assertEqual(mock_execute_fetch_run.call_args.kwargs["fetch_run_id"],fetch_run_id)
-        self.assertEqual(mock_execute_fetch_run.call_args.kwargs["fetch_options"].maximum_comment_count,5)
-        self.assertTrue(mock_execute_fetch_run.call_args.kwargs["fetch_options"].include_replies)
-        self.assertEqual(mock_execute_fetch_run.call_args.kwargs["fetch_options"].sort_order,YouTubeCommentSortOrder.NEWEST)
+        mock_execute_fetch_run.assert_called_once_with(fetch_run_id=fetch_run_id)
+        mock_ai_delay.assert_called_once_with(fetch_run_id=fetch_run_id)
+
+    @patch("analyses.tasks.execute_report_v2_analysis_by_id")
+    def test_v2_analysis_task_uses_ai_queue_and_returns_result_id(self, mock_execute_analysis):
+        result_id = uuid.uuid4()
+        mock_execute_analysis.return_value = SimpleNamespace(id=result_id)
+        fetch_run_id = str(uuid.uuid4())
+
+        actual_result_id = execute_report_v2_analysis_task.run(fetch_run_id=fetch_run_id)
+
+        self.assertEqual(execute_report_v2_analysis_task.name, "analyses.execute_report_v2_analysis")
+        self.assertEqual(execute_report_v2_analysis_task.queue, "ai_analysis")
+        self.assertEqual(actual_result_id, str(result_id))
+        mock_execute_analysis.assert_called_once_with(fetch_run_id=fetch_run_id)
+
+    @patch("analyses.tasks.mark_report_v2_dispatch_failed")
+    @patch("analyses.tasks.execute_report_v2_analysis_task.delay", side_effect=RuntimeError("AI Queue 無法連線"))
+    @patch("analyses.tasks.execute_youtube_fetch_run_by_id", return_value=12)
+    def test_ai_dispatch_failure_is_recorded_and_reraised(self, mock_execute_fetch_run, mock_ai_delay, mark_failed):
+        fetch_run_id = str(uuid.uuid4())
+
+        with self.assertRaisesRegex(RuntimeError, "AI Queue 無法連線"):
+            execute_youtube_fetch_run_task.run(fetch_run_id=fetch_run_id)
+
+        mock_execute_fetch_run.assert_called_once_with(fetch_run_id=fetch_run_id)
+        mock_ai_delay.assert_called_once_with(fetch_run_id=fetch_run_id)
+        mark_failed.assert_called_once()
+        self.assertEqual(mark_failed.call_args.kwargs["fetch_run_id"], fetch_run_id)
 
 
 """測試從網站建立分析任務的流程。"""
@@ -1266,7 +1326,8 @@ class AnalysisJobStartViewTests(TestCase):
             video_title="準備分析的影片",
         )
 
-    def test_post_creates_job_and_redirects_to_job_page(self):
+    @patch("analyses.views.execute_youtube_fetch_run_task.delay")
+    def test_post_creates_job_dispatches_fetch_and_redirects_to_job_page(self, dispatch_fetch):
         """POST 開始分析後，應建立任務並導向任務頁。"""
 
         response = self.client.post(reverse("analyses:start_analysis", args=[self.video_record.id]))
@@ -1274,10 +1335,24 @@ class AnalysisJobStartViewTests(TestCase):
 
         self.assertEqual(AnalysisJob.objects.count(), 1)
         self.assertEqual(created_analysis_job.video,self.video_record)
+        dispatch_fetch.assert_called_once_with(fetch_run_id=str(created_analysis_job.fetch_runs.get().id))
         self.assertRedirects(
             response,
             reverse("analyses:analysis_job_detail",args=[created_analysis_job.id]),
         )
+
+    @patch("analyses.views.execute_youtube_fetch_run_task.delay", side_effect=RuntimeError("Redis 無法連線"))
+    def test_dispatch_failure_is_visible_on_the_job_page(self, dispatch_fetch):
+        with self.assertLogs("analyses.views", level="ERROR"):
+            response = self.client.post(reverse("analyses:start_analysis", args=[self.video_record.id]), follow=True)
+        analysis_job = AnalysisJob.objects.get()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(analysis_job.status, AnalysisJob.Status.FAILED)
+        self.assertIn("無法啟動背景分析工作", analysis_job.error_message)
+        self.assertContains(response, "請確認 Redis 與 Celery Worker")
+        self.assertNotContains(response, "Redis 無法連線")
+        dispatch_fetch.assert_called_once()
 
     """GET 不可建立任務，必須回傳 405。"""
     def test_get_does_not_create_analysis_job(self):
@@ -1323,6 +1398,21 @@ class AnalysisJobStartViewTests(TestCase):
         self.assertContains(response,"模擬留言清理失敗")
         self.assertContains(response,"失敗")
 
+    def test_completed_job_detail_stays_on_progress_page_and_displays_report_button(self):
+        analysis_job = AnalysisJob.objects.create(
+            video=self.video_record,
+            status=AnalysisJob.Status.COMPLETED,
+            current_stage=AnalysisJob.Stage.REPORT_GENERATION,
+            progress_percentage=100,
+        )
+
+        response = self.client.get(reverse("analyses:analysis_job_detail", args=[analysis_job.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "analyses/analysis_job_detail.html")
+        self.assertContains(response, "查看分析報告")
+        self.assertContains(response, reverse("analyses:analysis_report_detail", args=[analysis_job.id]))
+
     def test_analysis_job_progress_endpoint_returns_only_progress_panel(self):
         analysis_job = AnalysisJob.objects.create(video=self.video_record)
         response = self.client.get(reverse("analyses:analysis_job_progress",args=[analysis_job.id]))
@@ -1334,6 +1424,43 @@ class AnalysisJobStartViewTests(TestCase):
         self.assertEqual(response.context["analysis_job"],analysis_job)
         self.assertEqual(len(response.context["analysis_stages"]),5)
         self.assertContains(response,'id="analysis-job-progress-panel"')
+        self.assertContains(response, 'hx-trigger="load delay:1s, every 2s"')
+
+    def test_completed_htmx_progress_poll_returns_completed_panel_and_report_button(self):
+        analysis_job = AnalysisJob.objects.create(
+            video=self.video_record,
+            status=AnalysisJob.Status.COMPLETED,
+            current_stage=AnalysisJob.Stage.REPORT_GENERATION,
+            progress_percentage=100,
+        )
+
+        response = self.client.get(
+            reverse("analyses:analysis_job_progress", args=[analysis_job.id]),
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("HX-Redirect", response)
+        self.assertContains(response, "查看分析報告")
+        self.assertNotContains(response, 'hx-trigger="load delay:1s, every 2s"')
+
+    def test_comment_fetching_stage_displays_live_and_preview_comment_counts(self):
+        self.video_record.video_comment_count = 789
+        self.video_record.save(update_fields=["video_comment_count", "updated_at"])
+        analysis_job = AnalysisJob.objects.create(
+            video=self.video_record,
+            status=AnalysisJob.Status.RUNNING,
+            current_stage=AnalysisJob.Stage.COMMENT_FETCHING,
+        )
+        FetchRun.objects.create(
+            analysis_job=analysis_job,
+            data_source=AnalysisJob.DataSource.SELENIUM,
+            fetched_comment_count=123,
+        )
+
+        response = self.client.get(reverse("analyses:analysis_job_progress", args=[analysis_job.id]))
+
+        self.assertContains(response, "正在抓取 YouTube 留言（已抓 123／留言數 789）")
 
 """測試留言抓取紀錄的資料庫規則。"""
 class FetchRunModelTests(TestCase):
@@ -1911,6 +2038,27 @@ class YouTubeFetchServiceTests(TestCase):
         self.assertEqual(CommentObservation.objects.count(), 3)
         self.assertEqual(reply_comment.parent_youtube_comment_id, "UgzParent123")
         self.assertEqual(reply_comment.parent_comment, parent_comment)
+
+    def test_fetch_progress_is_saved_after_each_unique_comment(self):
+        """Selenium 尚未抓完時，其他請求也應能讀到逐步增加的留言數。"""
+        observed_progress = []
+        progress_provider = MagicMock(spec=YouTubeProvider)
+
+        def comment_iterator():
+            for comment_data in (
+                self.parent_comment_data,
+                self.reply_comment_data,
+                self.newest_comment_data,
+            ):
+                yield comment_data
+                self.fetch_run.refresh_from_db()
+                observed_progress.append(self.fetch_run.fetched_comment_count)
+
+        progress_provider.iter_video_comments.return_value = comment_iterator()
+
+        fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=progress_provider)
+
+        self.assertEqual(observed_progress, [1, 2, 3])
 
     def test_unresolved_parent_youtube_id_is_preserved(self):
         """只抓到回覆但尚未抓到父留言時，應保存原始父留言 ID。"""
@@ -2600,97 +2748,6 @@ class AIAnalysisExecutionServiceTests(TestCase):
         self.analysis_job.refresh_from_db()
         self.assertEqual(self.analysis_job.status, AnalysisJob.Status.FAILED)
         self.assertFalse(self.analysis_job.analysis_results.exists())
-
-
-@override_settings(DEBUG=True)
-class AIReportPreviewViewTests(SimpleTestCase):
-    """本機 JSON 報告預覽不應使用資料庫或呼叫 AI。"""
-
-    def setUp(self):
-        self.payload = {
-            "validation_passed": True,
-            "request": {
-                "youtube_video_id": "abcdefghijk", "video_title": "報告預覽測試影片",
-                "comments": [{
-                    "sequence": 1, "youtube_comment_id": "CommentId", "parent_youtube_comment_id": None,
-                    "author_display_name": "測試作者", "comment_text": "原始留言", "like_count": 0,
-                    "published_time_text": "昨天", "is_pinned": False,
-                }],
-            },
-            "response": {
-                "provider_name": "deepseek", "model_name": "deepseek-v4-flash",
-                "prompt_version": "comment-analysis-v2",
-                "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
-                "report": {
-                    "analysis_mode": "small", "analyzed_comment_count": 1,
-                    "top_level_comment_count": 1, "reply_comment_count": 0,
-                    "overall_summary": "測試報告摘要", "sentiment": None,
-                    "topics": [{"name": "測試議題", "summary": "議題摘要", "evidence_comment_ids": ["CommentId"]}],
-                    "representative_comments": [{
-                        "youtube_comment_id": "CommentId", "author_display_name": "測試作者",
-                        "like_count": 0, "excerpt": "原始留言", "interpretation": "測試解讀",
-                    }],
-                    "repeated_content_findings": [], "risk_points": [], "recommendations": [],
-                    "limitations": ["樣本不足"],
-                },
-            },
-        }
-        patcher = patch("analyses.views.Path.read_text")
-        self.read_text = patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def _get_preview(self):
-        self.read_text.return_value = json.dumps(self.payload, ensure_ascii=False)
-        return self.client.get(reverse("analyses:ai_report_preview"))
-
-    def test_preview_renders_saved_report_without_calling_ai(self):
-        with patch.object(DeepSeekAIProvider, "analyze_comments") as analyze:
-            response = self._get_preview()
-        analyze.assert_not_called()
-        self.assertContains(response, "報告預覽測試影片")
-        self.assertContains(response, "測試報告摘要")
-        self.assertContains(response, "原始留言")
-        self.assertContains(response, "comment-analysis-v2")
-        self.assertContains(response, "歷史結果")
-        self.assertIn("no-store", response.headers["Cache-Control"])
-
-    @override_settings(DEBUG=False)
-    def test_preview_is_unavailable_outside_debug_mode(self):
-        response = self._get_preview()
-        self.assertEqual(response.status_code, 404)
-        self.read_text.assert_not_called()
-
-    def test_preview_requires_get(self):
-        response = self.client.post(reverse("analyses:ai_report_preview"))
-        self.assertEqual(response.status_code, 405)
-        self.read_text.assert_not_called()
-
-    def test_preview_rejects_missing_or_invalid_file(self):
-        for value in (FileNotFoundError(), json.JSONDecodeError("bad", "x", 0)):
-            with self.subTest(error=type(value).__name__):
-                self.read_text.side_effect = value
-                response = self.client.get(reverse("analyses:ai_report_preview"))
-                self.assertEqual(response.status_code, 404)
-
-    def test_preview_rejects_unvalidated_or_inconsistent_data(self):
-        self.payload["validation_passed"] = False
-        self.assertEqual(self._get_preview().status_code, 404)
-        self.payload["validation_passed"] = True
-        self.payload["response"]["report"]["topics"][0]["evidence_comment_ids"] = ["UnknownId"]
-        self.assertEqual(self._get_preview().status_code, 404)
-
-    def test_preview_escapes_model_text_and_comments(self):
-        hostile = '<script>alert("x")</script>'
-        self.payload["response"]["report"]["overall_summary"] = hostile
-        self.payload["request"]["comments"][0]["comment_text"] = hostile
-        response = self._get_preview()
-        self.assertNotContains(response, hostile)
-        self.assertContains(response, "&lt;script&gt;")
-
-    def test_preview_handles_small_sample_and_empty_sections(self):
-        response = self._get_preview()
-        self.assertContains(response, "此報告未提供情緒百分比")
-        self.assertContains(response, "沒有符合目前規則的重複內容")
 
 
 class DeepSeekAIProviderTests(SimpleTestCase):

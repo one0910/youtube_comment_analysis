@@ -76,6 +76,9 @@ class FetchRunAdmin(admin.ModelAdmin):
         "data_source",
         "status",
         "attempt_number",
+        "sort_order",
+        "include_replies",
+        "maximum_comment_count",
         "fetched_comment_count",
         "created_at",
     )
@@ -83,6 +86,8 @@ class FetchRunAdmin(admin.ModelAdmin):
     list_filter = (
         "data_source",
         "status",
+        "sort_order",
+        "include_replies",
     )
 
     search_fields = (

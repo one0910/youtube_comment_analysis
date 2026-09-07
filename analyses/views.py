@@ -1,18 +1,9 @@
 # views.py 決定「要呈現哪些資料」。
 
-import json
-from pathlib import Path
-
-from django.conf import settings
-from django.http import Http404
-from django.views.decorators.cache import never_cache
-
-from .providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput, AIProviderResponse, AIProviderUsage
-from .providers.deepseek_ai_provider import DEEPSEEK_PROMPT_VERSION, _build_report_from_payload
-from .services.ai_analysis_execution_service import _validate_provider_response
+import logging
 
 from .forms import NewAnalysisForm
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import (
     get_object_or_404,
     redirect,
@@ -34,10 +25,16 @@ from .services.analysis_job_progress_service import build_analysis_stage_present
 from .providers.youtube_provider import (
     YouTubeVideoUnavailableError,
 )
+from .services.report_v2_preview_service import build_report_preview_context
+from .services.report_v2_result_service import ReportV2UnavailableError, load_latest_report_v2_for_job
+from .tasks import execute_youtube_fetch_run_task
 
 
+logger = logging.getLogger(__name__)
+
+
+"""顯示 TubeSense AI 分析總覽。"""
 def overview(request: HttpRequest) -> HttpResponse:
-    """顯示 TubeSense AI 分析總覽。"""
     context = {
         "page_title": _("分析總覽"),
         "overview_stats": [
@@ -65,9 +62,9 @@ def overview(request: HttpRequest) -> HttpResponse:
     }
     return render(request, "analyses/overview.html", context)
   
-
+"""顯示新增分析頁面並驗證 YouTube 影片網址。"""
 def new_analysis(request: HttpRequest) -> HttpResponse:
-    """顯示新增分析頁面並驗證 YouTube 影片網址。"""
+
     form = NewAnalysisForm(
         request.POST if request.method == "POST" else None
     )
@@ -119,6 +116,15 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
 def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
     video_record = get_object_or_404( Video,id=video_id,)
     created_analysis_job = create_pending_analysis_job_for_video(video_record=video_record)
+    fetch_run = created_analysis_job.fetch_runs.get(attempt_number=1)
+
+    try:
+        execute_youtube_fetch_run_task.delay(fetch_run_id=str(fetch_run.id))
+    except Exception:
+        logger.exception("無法將分析任務送入 Celery Queue。", extra={"analysis_job_id": str(created_analysis_job.id)})
+        created_analysis_job.status = AnalysisJob.Status.FAILED
+        created_analysis_job.error_message = "無法啟動背景分析工作，請確認 Redis 與 Celery Worker 是否正常運作。"
+        created_analysis_job.save(update_fields=["status", "error_message", "updated_at"])
 
     return redirect(
         "analyses:analysis_job_detail",
@@ -134,6 +140,7 @@ def analysis_job_detail(request: HttpRequest, analysis_job_id) -> HttpResponse:
         "page_title": _("分析進度"),
         "analysis_job": analysis_job,
         "analysis_stages": build_analysis_stage_presentations(analysis_job=analysis_job),
+        "current_fetch_run": analysis_job.fetch_runs.order_by("-attempt_number").first(),
     }
 
     return render(request,"analyses/analysis_job_detail.html",context)
@@ -147,63 +154,20 @@ def analysis_job_progress(request: HttpRequest, analysis_job_id) -> HttpResponse
     context = {
         "analysis_job": analysis_job,
         "analysis_stages": build_analysis_stage_presentations(analysis_job=analysis_job),
+        "current_fetch_run": analysis_job.fetch_runs.order_by("-attempt_number").first(),
     }
     return render(request,"analyses/partials/analysis_job_progress_panel.html",context)
 
 
-"""僅在開發模式讀取固定的 Smoke Test JSON，不呼叫 API 或寫入資料庫。"""
 @require_GET
-@never_cache
-def ai_report_preview(request: HttpRequest) -> HttpResponse:
-    if not settings.DEBUG:
-        raise Http404
-
-    report_path = Path(settings.BASE_DIR) / "temporary" / "deepseek_analysis_xtJBhAtpj1s_20260904_162030_685217.json"
-
+def analysis_report_detail(request: HttpRequest, analysis_job_id) -> HttpResponse:
+    analysis_job = get_object_or_404(AnalysisJob.objects.select_related("video"), id=analysis_job_id)
+    if analysis_job.status != AnalysisJob.Status.COMPLETED:
+        raise Http404("分析尚未完成。")
     try:
-        payload = json.loads(report_path.read_text(encoding="utf-8"))
-
-        if payload["validation_passed"] is not True:
-            raise ValueError("報告尚未通過驗證。")
-
-        source = payload["request"]
-        analysis_request = AIAnalysisRequest(
-            youtube_video_id=source["youtube_video_id"],
-            video_title=source["video_title"],
-            comments=tuple(AICommentInput(**item) for item in source["comments"]),
-        )
-
-        saved = payload["response"]
-        response = AIProviderResponse(
-            provider_name=saved["provider_name"],
-            model_name=saved["model_name"],
-            prompt_version=saved["prompt_version"],
-            report=_build_report_from_payload(saved["report"]),
-            usage=AIProviderUsage(**saved["usage"]),
-        )
-        _validate_provider_response(analysis_request=analysis_request, provider_response=response)
-
-    except (OSError, UnicodeError, ValueError, KeyError, TypeError, AttributeError) as error:
-        raise Http404("預覽檔案不存在、格式不正確或驗證失敗。") from error
-
-    comments_by_id = {comment.youtube_comment_id: comment for comment in analysis_request.comments}
-    topic_panels = [
-        {"topic": topic, "evidence": [comments_by_id[comment_id] for comment_id in topic.evidence_comment_ids]}
-        for topic in response.report.topics
-    ]
-
-    context = {
-        "page_title": "分析報告預覽",
-        "video_title": analysis_request.video_title,
-        "report": response.report,
-        "provider_response": response,
-        "topic_panels": topic_panels,
-        "is_historical_prompt": response.prompt_version != DEEPSEEK_PROMPT_VERSION,
-        "current_prompt_version": DEEPSEEK_PROMPT_VERSION,
-        "text_sections": [
-            {"title": "風險觀察（AI 草稿）", "items": response.report.risk_points},
-            {"title": "建議（AI 草稿）", "items": response.report.recommendations},
-            {"title": "分析限制", "items": response.report.limitations},
-        ],
-    }
-    return render(request, "analyses/ai_report_preview.html", context)
+        report, facts = load_latest_report_v2_for_job(analysis_job)
+    except ReportV2UnavailableError:
+        return HttpResponse("分析報告目前無法讀取。", status=404)
+    context = build_report_preview_context(report, facts, is_fixture=False, is_preview=False)
+    context["analysis_job"] = analysis_job
+    return render(request, "analyses/report_v2_preview.html", context)

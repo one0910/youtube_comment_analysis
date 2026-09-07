@@ -96,7 +96,7 @@ def build_report_preview_fixture(*, small: bool = False):
     return report, facts
 
 
-def build_report_preview_context(report, facts, *, is_fixture: bool = True) -> dict:
+def build_report_preview_context(report, facts, *, is_fixture: bool = True, is_preview: bool = True) -> dict:
     validate_report_source_facts(report, facts)
     comments = {c.youtube_comment_id: c for c in facts.request.comments}
     analysis_mode = report.sample.analysis_mode.value
@@ -120,8 +120,9 @@ def build_report_preview_context(report, facts, *, is_fixture: bool = True) -> d
             sentiment_rows.append({"label": label, "category": category, "color": color, "offset": -offset})
             offset += category.percentage
     return {
-        "page_title": "新版影片分析報告", "report": report, "facts": facts, "sentiment_rows": sentiment_rows,
-        "is_fixture": is_fixture,
+        "page_title": "新版影片分析報告" if is_preview else "影片分析報告",
+        "report": report, "facts": facts, "sentiment_rows": sentiment_rows,
+        "is_fixture": is_fixture, "is_preview": is_preview,
         "sample_mode_detail": sample_mode_details[analysis_mode],
         "topic_panels": panels(report.topics, evidence_limit=3), "behavior_panels": panels(report.behavior_insights),
         "conclusion_panels": panels(report.conclusions),

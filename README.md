@@ -106,16 +106,27 @@ Provider  隔離 Selenium、YouTube API 與未來 AI 供應商
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r .\requirements-dev.txt
+python manage.py migrate
 ```
 
 ### 啟動目前的 Django 專案
+
+先啟動 Redis，再分別開啟 Celery Worker 與 Django Server：
+
+```powershell
+docker compose up -d redis
+celery -A config worker -l info -P solo -Q youtube_selenium,ai_analysis
+```
+
+另一個 PowerShell 視窗：
 
 ```powershell
 python manage.py check
 python manage.py runserver
 ```
 
-瀏覽 `http://127.0.0.1:8000/`。目前仍在 Django 基礎建置階段，尚未建立產品頁面。
+瀏覽 `http://127.0.0.1:8000/`。真實 AI 分析還需要目前 PowerShell 能讀取
+`DEEPSEEK_API_KEY`；金鑰只放在環境變數，不寫入專案檔案。
 
 ## 開發原則
 

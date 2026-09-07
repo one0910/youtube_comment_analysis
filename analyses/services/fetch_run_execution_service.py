@@ -6,6 +6,7 @@ from analyses.models import AnalysisJob, FetchRun
 from analyses.providers.selenium_youtube_provider import SeleniumYouTubeProvider
 from analyses.providers.youtube_provider import (
     YouTubeCommentFetchOptions,
+    YouTubeCommentSortOrder,
     YouTubeProvider,
 )
 
@@ -94,6 +95,13 @@ def execute_youtube_fetch_run_by_id(
 ) -> int:
 
     fetch_run = FetchRun.objects.select_related("analysis_job","analysis_job__video").get(pk=fetch_run_id)
+
+    if fetch_options is None:
+        fetch_options = YouTubeCommentFetchOptions(
+            sort_order=YouTubeCommentSortOrder(fetch_run.sort_order),
+            include_replies=fetch_run.include_replies,
+            maximum_comment_count=fetch_run.maximum_comment_count,
+        )
 
     if fetch_run.data_source == AnalysisJob.DataSource.SELENIUM:
         youtube_provider = SeleniumYouTubeProvider()

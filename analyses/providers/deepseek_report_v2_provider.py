@@ -1,4 +1,4 @@
-"""新版報告專用 Provider；保留 v1 呼叫介面與預覽流程不變。"""
+"""正式 V2 報告使用的 DeepSeek Provider。"""
 
 import json
 import os
@@ -226,7 +226,7 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
 
 
 class DeepSeekReportV2Provider:
-    """回傳 AIReportV2，不可直接交給目前使用 v1 AIProviderResponse 的 execute_ai_analysis。"""
+    """回傳經來源事實驗證的 AIReportV2。"""
 
     def __init__(self, client: Any | None = None, model_name: str = DEEPSEEK_DEFAULT_MODEL):
         self._model_name = model_name

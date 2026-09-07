@@ -144,11 +144,18 @@ class ReportV2PreviewTests(SimpleTestCase):
         self.assertContains(response, '/static/css/app.css')
         self.assertNotContains(response, 'report-v2.css')
 
+    def test_report_navigation_is_highlighted_in_desktop_and_mobile_sidebars(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, 'data-testid="desktop-report-nav"')
+        self.assertContains(response, 'data-testid="mobile-report-nav"')
+        self.assertContains(response, 'aria-current="page"', count=2)
+
     def test_sample_notice_uses_medium_mode_wording_without_fetch_details(self):
         response = self.client.get(self.url)
         self.assertContains(response, 'data-testid="sample-notice"')
         self.assertContains(response, "中型樣本模式（情況 B）", count=1)
         self.assertContains(response, "本次分析 <strong class=\"font-bold text-brand-navy\">30 則留言</strong>")
+        self.assertContains(response, "（含 <strong")
         self.assertContains(response, "20 則主留言")
         self.assertContains(response, "10 則回覆")
         self.assertNotContains(response, "30 至 200 筆")

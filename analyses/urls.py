@@ -12,5 +12,5 @@ urlpatterns = [
     path("analyses/videos/<int:video_id>/start/", views.start_analysis, name="start_analysis"),
     path("analyses/jobs/<uuid:analysis_job_id>/",views.analysis_job_detail,name="analysis_job_detail"),
     path("analyses/jobs/<uuid:analysis_job_id>/progress/",views.analysis_job_progress,name="analysis_job_progress"),
-    path("analyses/reports/preview/", views.ai_report_preview, name="ai_report_preview"),
+    path("analyses/jobs/<uuid:analysis_job_id>/report/",views.analysis_report_detail,name="analysis_report_detail"),
 ]

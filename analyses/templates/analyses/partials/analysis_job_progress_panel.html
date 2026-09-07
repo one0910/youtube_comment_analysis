@@ -1,6 +1,14 @@
-{% load i18n %}
+{% load humanize i18n %}
 
-<div id="analysis-job-progress-panel" class="mt-8 space-y-6">
+<div
+    id="analysis-job-progress-panel"
+    class="mt-8 space-y-6"
+    {% if analysis_job.status != "completed" and analysis_job.status != "failed" and analysis_job.status != "cancelled" %}
+        hx-get="{% url 'analyses:analysis_job_progress' analysis_job.id %}"
+        hx-trigger="load delay:1s, every 2s"
+        hx-swap="outerHTML"
+    {% endif %}
+>
     <article class="rounded-2xl border border-app-border bg-app-surface p-4 shadow-sm sm:p-6">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div class="aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-slate-100 sm:h-24 sm:w-40">
@@ -133,11 +141,22 @@
                         </div>
 
                         <p class="mt-1 text-sm leading-6 {% if stage.state == 'failed' %}text-red-600{% else %}text-slate-500{% endif %}">
-                            {{ stage.description }}
+                            {% if stage.stage == "comment_fetching" and stage.state == "current" and current_fetch_run %}{% translate "正在抓取 YouTube 留言" %}（已抓 {{ current_fetch_run.fetched_comment_count|intcomma:False }}／留言數 {% if analysis_job.video.video_comment_count is not None %}{{ analysis_job.video.video_comment_count|intcomma:False }}{% else %}未知{% endif %}）{% else %}{{ stage.description }}{% endif %}
                         </p>
                     </div>
                 </li>
             {% endfor %}
         </ol>
     </article>
+
+    {% if analysis_job.status == "completed" %}
+        <div class="flex justify-end">
+            <a
+                href="{% url 'analyses:analysis_report_detail' analysis_job.id %}"
+                class="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-brand-purple px-6 py-3 font-semibold text-white transition hover:bg-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple sm:w-auto"
+            >
+                {% translate "查看分析報告" %}
+            </a>
+        </div>
+    {% endif %}
 </div>
