@@ -2,7 +2,7 @@
 
 import json
 
-from analyses.providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
+from analyses.providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from analyses.providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
 from analyses.providers.deepseek_report_v2_provider import parse_report_response
 from analyses.services.ai_report_preparation_service import prepare_report_facts

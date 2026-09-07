@@ -1,14 +1,10 @@
-import json
-import os
 import uuid
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase,TestCase #TestCase：每個測試之間隔離資料庫資料。
-from django.test import override_settings
 from django.urls import reverse #reverse()：透過 URL 名稱取得網址。
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
@@ -57,12 +53,9 @@ from .providers.youtube_provider import (
 )
 
 from .providers.fake_youtube_provider import FakeYouTubeProvider
-from .providers.ai_analysis_provider import (
-    AIAnalysisMode,
+from .providers.ai_analysis_request import (
     AIAnalysisRequest,
-    AIAnalysisReportData,
     AICommentInput,
-    SentimentDistribution,
 )
 from .providers.selenium_youtube_provider import (
     COMMENT_ELEMENT_DATA_SCRIPT,
@@ -2204,8 +2197,8 @@ class YouTubeFetchServiceTests(TestCase):
         self.assertEqual(Comment.objects.get(youtube_comment_id="UgzNewest123").video, other_video_record)
 
 
-class AIAnalysisProviderContractTests(SimpleTestCase):
-    """AI Provider 的輸入與結構化輸出必須遵守固定契約。"""
+class AIAnalysisRequestContractTests(SimpleTestCase):
+    """AI 分析輸入必須遵守固定契約。"""
 
     def setUp(self):
         self.analysis_request = AIAnalysisRequest(
@@ -2239,26 +2232,6 @@ class AIAnalysisProviderContractTests(SimpleTestCase):
         self.assertEqual(self.analysis_request.comment_count, 2)
         self.assertEqual(self.analysis_request.top_level_comment_count, 1)
         self.assertEqual(self.analysis_request.reply_comment_count, 1)
-
-    def test_sentiment_distribution_requires_percentages_to_total_100(self):
-        with self.assertRaisesMessage(ValueError, "情緒百分比總和必須等於 100。"):
-            SentimentDistribution(
-                positive_percentage=10,
-                neutral_percentage=10,
-                negative_percentage=70,
-                overview="測試情緒摘要",
-            )
-
-    def test_report_comment_counts_must_be_consistent(self):
-        with self.assertRaisesMessage(ValueError, "主留言數與回覆數的總和必須等於分析留言數。"):
-            AIAnalysisReportData(
-                analysis_mode=AIAnalysisMode.LARGE,
-                analyzed_comment_count=2,
-                top_level_comment_count=2,
-                reply_comment_count=1,
-                overall_summary="測試總結",
-                sentiment=None,
-            )
 
 
 class AnalysisResultModelTests(TestCase):

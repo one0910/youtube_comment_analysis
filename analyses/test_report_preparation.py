@@ -2,7 +2,7 @@ from dataclasses import replace
 
 from django.test import SimpleTestCase
 
-from .providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
+from .providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from .providers import ai_report_v2 as v2
 from .services.ai_report_preparation_service import prepare_report_facts, validate_report_source_facts
 
@@ -157,7 +157,7 @@ class ReportSourceValidationTests(SimpleTestCase):
                 validate_report_source_facts(replace(self.report, **changes), self.facts)
 
     def test_unknown_reference_rejected_in_every_insight_section(self):
-        for section in ("conclusions", "behavior_insights", "risks", "recommendations"):
+        for section in ("conclusions", "behavior_insights"):
             with self.subTest(section=section), self.assertRaises(ValueError):
                 report = replace(self.report, **{section: (v2.ReportInsightV2("標題", "說明", ("invented",)),)})
                 validate_report_source_facts(report, self.facts)

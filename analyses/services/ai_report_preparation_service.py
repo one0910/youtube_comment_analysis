@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, replace
 import re
 
-from analyses.providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
+from analyses.providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from analyses.providers.ai_report_v2 import (
     AIReportV2, DisplayNameActivityV2, RepeatedTextGroupV2, ReportSampleV2, ReportVideoV2,
 )
@@ -141,7 +141,7 @@ def validate_report_source_facts(report: AIReportV2, facts: PreparedReportFacts)
     if report.display_name_activity != facts.display_name_activity:
         raise ValueError("活躍發言紀錄與 Python 計算結果不一致。")
     source_ids = {comment.youtube_comment_id for comment in facts.request.comments}
-    for item in (*report.topics, *report.conclusions, *report.behavior_insights, *report.risks, *report.recommendations):
+    for item in (*report.topics, *report.conclusions, *report.behavior_insights):
         if not set(item.evidence_comment_ids).issubset(source_ids):
             raise ValueError("報告引用了不屬於本次輸入的留言 ID。")
 
@@ -197,8 +197,6 @@ def replace_report_comment_refs_with_author_names(
         ),
         behavior_insights=replace_insights(report.behavior_insights),
         conclusions=replace_insights(report.conclusions),
-        risks=replace_insights(report.risks),
-        recommendations=replace_insights(report.recommendations),
     )
 
 

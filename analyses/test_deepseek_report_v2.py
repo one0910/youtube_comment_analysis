@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from .providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
+from .providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from .providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
 from .providers.deepseek_report_v2_provider import (
     DeepSeekConfigurationError, DeepSeekReportV2Provider, DeepSeekResponseError,
@@ -258,9 +258,6 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         for section in ("conclusions", "behavior_insights"):
             with self.subTest(section=section), self.assertRaises(DeepSeekResponseError):
                 self.parse({**self.payload, section: [{"title": "標題", "description": "說明", "evidence_comment_refs": []}]})
-        report = self.parse()
-        self.assertEqual(report.risks, ())
-        self.assertEqual(report.recommendations, ())
 
     def test_empty_top_list_when_all_likes_unknown(self):
         facts = self.prepare(replace(self.request, comments=tuple(replace(c, like_count=None) for c in self.comments)))

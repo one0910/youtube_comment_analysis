@@ -10,11 +10,16 @@ from analyses.providers.ai_report_v2 import (
 
 def load_report_v2_payload(payload: dict) -> AIReportV2:
     """將已儲存 JSON 還原成受契約驗證的 DTO；衍生欄位不可被檔案竄改。"""
-    _keys(payload, {
+    report_keys = {
         "video", "sample", "provenance", "overall_summary", "atmosphere", "sentiment", "topics",
         "top_liked_comments", "repeated_text_groups", "display_name_activity", "behavior_insights",
-        "conclusions", "risks", "recommendations", "limitations", "schema_version", "identity_notice",
-    }, "report")
+        "conclusions", "limitations", "schema_version", "identity_notice",
+    }
+    legacy_keys = {"risks", "recommendations"}
+    _keys({key: value for key, value in payload.items() if key not in legacy_keys}, report_keys, "report")
+    for key in legacy_keys & set(payload):
+        if not isinstance(payload[key], list):
+            raise ValueError(f"舊版 {key} 欄位必須是 JSON array。")
     if payload["schema_version"] != REPORT_SCHEMA_VERSION or payload["identity_notice"] != IDENTITY_NOTICE:
         raise ValueError("報告版本或身分提示不正確。")
     video_payload = _object(payload, "video")
@@ -47,8 +52,6 @@ def load_report_v2_payload(payload: dict) -> AIReportV2:
         display_name_activity=tuple(_load_activity(item) for item in _array(payload, "display_name_activity")),
         behavior_insights=tuple(_load_insight(item) for item in _array(payload, "behavior_insights")),
         conclusions=tuple(_load_insight(item) for item in _array(payload, "conclusions")),
-        risks=tuple(_load_insight(item) for item in _array(payload, "risks")),
-        recommendations=tuple(_load_insight(item) for item in _array(payload, "recommendations")),
         limitations=tuple(_array(payload, "limitations")),
     )
 

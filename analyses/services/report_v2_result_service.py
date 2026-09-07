@@ -1,5 +1,5 @@
 from analyses.models import AnalysisJob, AnalysisResult
-from analyses.providers.ai_analysis_provider import AIAnalysisRequest
+from analyses.providers.ai_analysis_request import AIAnalysisRequest
 from analyses.providers.ai_report_v2 import AIReportV2, REPORT_SCHEMA_VERSION
 
 from .ai_analysis_request_service import build_ai_analysis_request_from_fetch_run

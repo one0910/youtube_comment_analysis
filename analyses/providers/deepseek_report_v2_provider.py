@@ -6,7 +6,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
-from .ai_analysis_provider import AIAnalysisRequest
+from .ai_analysis_request import AIAnalysisRequest
 from .ai_report_v2 import (
     AIReportV2, ReportInsightV2, ReportProvenanceV2, ReportTopicV2, ReportVideoV2,
     SentimentCategoryV2, SentimentEstimateV2, TopLikedCommentV2,
@@ -244,7 +244,7 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
         overall_summary=payload["overall_summary"], atmosphere=payload["atmosphere"], sentiment=sentiment,
         topics=tuple(topics), top_liked_comments=top_liked, repeated_text_groups=facts.repeated_text_groups,
         display_name_activity=facts.display_name_activity, limitations=tuple(dict.fromkeys(limitations)),
-        risks=(), recommendations=(), **sections,
+        **sections,
     )
     report = replace_report_comment_refs_with_author_names(report, facts)
     report = apply_report_sample_scope(report)

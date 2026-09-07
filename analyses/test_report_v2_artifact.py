@@ -18,6 +18,10 @@ class ReportV2ArtifactLoaderTests(SimpleTestCase):
     def test_round_trip_restores_validated_report(self):
         self.assertEqual(load_report_v2_payload(self.payload), self.report)
 
+    def test_legacy_empty_report_sections_are_ignored(self):
+        self.payload.update(risks=[], recommendations=[])
+        self.assertEqual(load_report_v2_payload(self.payload), self.report)
+
     def test_derived_and_unknown_fields_cannot_be_changed(self):
         cases = (
             ("schema", lambda data: data.update(schema_version="wrong")),

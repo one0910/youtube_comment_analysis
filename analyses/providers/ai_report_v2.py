@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .ai_analysis_provider import AIAnalysisMode
+from .ai_analysis_request import AIAnalysisMode
 
 
 REPORT_SCHEMA_VERSION = "comment-analysis-result-v2"
@@ -260,9 +260,6 @@ class AIReportV2:
     repeated_text_groups: tuple[RepeatedTextGroupV2, ...] = ()
     display_name_activity: tuple[DisplayNameActivityV2, ...] = ()
     behavior_insights: tuple[ReportInsightV2, ...] = ()
-    # 相容既有 v2 測試成品；comment-analysis-v5 之後的新流程固定為空。
-    risks: tuple[ReportInsightV2, ...] = ()
-    recommendations: tuple[ReportInsightV2, ...] = ()
     schema_version: str = field(default=REPORT_SCHEMA_VERSION, init=False)
     identity_notice: str = field(default=IDENTITY_NOTICE, init=False)
 
@@ -279,10 +276,9 @@ class AIReportV2:
         elif not isinstance(self.sentiment, SentimentEstimateV2):
             raise ValueError("30 則以上須提供情緒估計。")
         for name, item_type in (("topics", ReportTopicV2), ("top_liked_comments", TopLikedCommentV2),
-                                ("repeated_text_groups", RepeatedTextGroupV2),
-                                ("display_name_activity", DisplayNameActivityV2),
-                                ("conclusions", ReportInsightV2), ("behavior_insights", ReportInsightV2),
-                                ("risks", ReportInsightV2), ("recommendations", ReportInsightV2)):
+                                 ("repeated_text_groups", RepeatedTextGroupV2),
+                                 ("display_name_activity", DisplayNameActivityV2),
+                                 ("conclusions", ReportInsightV2), ("behavior_insights", ReportInsightV2)):
             _items(self, name, item_type, required=name in ("topics", "conclusions"))
         for limitation in _items(self, "limitations", str, required=True):
             _text(limitation, "分析限制")

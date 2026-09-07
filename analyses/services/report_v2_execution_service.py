@@ -8,7 +8,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from analyses.models import AnalysisJob, AnalysisResult, FetchRun
-from analyses.providers.ai_analysis_provider import AIAnalysisRequest
+from analyses.providers.ai_analysis_request import AIAnalysisRequest
 from analyses.providers.ai_report_v2 import AIReportV2, REPORT_SCHEMA_VERSION, ReportVideoV2
 from analyses.providers.deepseek_report_v2_provider import DeepSeekReportV2Provider
 

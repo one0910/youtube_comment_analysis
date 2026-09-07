@@ -1,7 +1,6 @@
 # 新版影片分析報告資料契約
 
-狀態：資料契約、Python 事實整理、新版 DeepSeek Provider／解析、模擬預覽均已完成測試。
-已在使用者授權下完成一次真實 API Smoke Test，並加入固定成品的唯讀預覽；尚未接入正式資料庫流程。
+狀態：資料契約、Python 事實整理、DeepSeek Provider／解析、資料庫保存與正式 RWD 報告頁均已完成測試，並已接入正式背景任務流程。
 
 定案：情緒採整批 AI 估計百分比，不做逐則分類、不換算成留言筆數。少於 30 則只呈現摘要與氛圍。
 
@@ -13,8 +12,8 @@
 留言快照及 Preview → Python 統計／選出 Top 5／建立短引用 → AI 解讀 →
 解析與來源驗證 → Python 回填事實 → v2 報告 → Django 模板。
 
-目前 v1 的 Provider、DTO、執行 Service 與預覽頁維持原樣。v2 不繼承 v1，
-不把舊資料直接改標為 v2，也不自動升級舊報告。提示詞版本與資料格式版本分開管理。
+舊版 Provider、輸出 DTO、執行 Service 與預覽頁均已移除。提示詞版本與資料格式版本分開管理，
+既有 V2 JSON 若含已停用的 `risks`、`recommendations` 空欄位，載入時會忽略以維持相容。
 
 ## 2. 最終報告欄位與 UI 對照
 
@@ -32,8 +31,6 @@
 | display_name_activity | DisplayNameActivityV2 清單 | Python；同顯示名稱在同討論串的多則發言 |
 | behavior_insights | ReportInsightV2 清單 | AI；對已計算現象的保守解讀 |
 | conclusions | ReportInsightV2 清單 | AI；分項總結 |
-| risks | 空清單 | 僅供舊 v2 測試成品相容；comment-analysis-v5 之後不再要求 AI 輸出 |
-| recommendations | 空清單 | 僅供舊 v2 測試成品相容；comment-analysis-v5 之後不再要求 AI 輸出 |
 | limitations | 非空文字清單 | 由 Python 產生的內部限制記錄，不要求 AI 輸出、不在報告頁顯示 |
 | identity_notice | 固定字串 | Python；顯示名稱非唯一身分，不以重複發言證明操作 |
 | provenance | ReportProvenanceV2 | 程式記錄供應商、模型、提示詞版本、時間、Token |

@@ -1,5 +1,5 @@
 from analyses.models import FetchRun
-from analyses.providers.ai_analysis_provider import (
+from analyses.providers.ai_analysis_request import (
     AIAnalysisRequest,
     AICommentInput,
 )
