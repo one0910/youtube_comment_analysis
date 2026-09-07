@@ -14,30 +14,38 @@ MVP 的分析任務頁以「目前分析階段」為核心，不要求即時 Log
 階段 2：共用 UI 與新增分析    已完成
 階段 3：資料模型與 Provider   已完成
 階段 4：Selenium 資料來源      MVP 核心已完成
-階段 5：背景任務與進度頁      進行中  ← 目前位置
-階段 6：AI 分析與報告頁       尚未開始
-階段 7：測試、安全與可觀測性  尚未開始
+階段 5：背景任務與進度頁      MVP 核心已完成
+階段 6：AI 分析與報告頁       MVP 核心已完成
+階段 7：測試、安全與可觀測性  進行中  ← 目前位置
 階段 8：Docker 與 AWS 部署    尚未開始
 ```
 
-目前已完成的核心資料流程：
+目前已完成的正式核心流程：
 
 ```text
 YouTube 網址
+    → Django／HTMX 驗證網址
     → Selenium 取得影片預覽
     → 儲存或更新 Video
     → 使用者按下「開始分析留言」
     → 建立 AnalysisJob 與第一筆 FetchRun
-    → 導向分析任務頁
+    → Celery 派送至 youtube_selenium Queue
+    → Selenium 串流抓取主留言與回覆
+    → 儲存 Comment 與 CommentObservation，持續更新抓取數量
+    → Celery 派送至 ai_analysis Queue
+    → DeepSeek Report V2 分析與嚴格來源驗證
+    → 儲存 AnalysisResult
+    → 分析進度頁停止 HTMX polling 並顯示「查看分析報告」
+    → 使用者主動進入正式 RWD 報告頁
 ```
 
-目前 Selenium 已能抓取主留言與完整回覆、保存留言與觀察紀錄，並更新 `AnalysisJob`／`FetchRun` 的執行狀態。下一步是先完成分析任務頁的 MVP UI，再把建立任務、背景執行、狀態更新與頁面輪詢串成瀏覽器可操作的完整流程。
+目前正式資料模型包含 `Video`、`AnalysisJob`、`FetchRun`、`Comment`、`CommentObservation` 與 `AnalysisResult`。Web Request 不直接執行 Selenium 或 AI；背景工作分別路由至 `youtube_selenium` 與 `ai_analysis` Queue。開發環境暫以同一個 `solo` Celery Worker 消費兩個 Queue，正式部署前再分離 Worker Process／Container。
 
 目前瀏覽器流程的實際界線：
 
 ```text
-已可測：輸入網址 → 影片預覽 → 建立 AnalysisJob／FetchRun → 導向分析任務頁
-尚未串接：分析任務建立後 → 背景執行 Selenium → 任務頁自動更新 → AI 分析 → 報告頁
+已可測：新增分析 → 影片預覽 → 建立任務 → 背景抓取留言 → AI 分析 → 完成進度 → 查看正式報告
+尚待強化：自動重試與逾時、錯誤分類、大量留言分批策略、正式環境安全、監控及部署
 ```
 
 ## 階段 0：專案與開發環境
@@ -163,25 +171,25 @@ YouTube 網址
 
 - [x] 建立頁面 3「分析任務」的基本路由、View 與 RWD 頁面骨架。
 - [x] 使用 POST 建立任務，GET 不會意外新增任務。
-- [ ] 在 `AnalysisJob` 建立可持久化的「目前分析階段」資料。
-- [ ] 加入 Redis 與 Celery。
-- [ ] 分離 `youtube_selenium` 與 `analysis` Queue。
-- [ ] Selenium Worker 初期 concurrency 設為 1。
-- [ ] 建立任務狀態與分析階段更新方式。
+- [x] 在 `AnalysisJob` 建立可持久化的「目前分析階段」資料。
+- [x] 加入 Redis 與 Celery。
+- [x] 將工作路由至 `youtube_selenium` 與 `ai_analysis` Queue。
+- [x] 開發環境 Selenium Worker 使用 `solo` Pool，concurrency 為 1。
+- [x] 建立任務狀態與分析階段更新方式。
 - [ ] 實作重試、逾時與錯誤分類。
-- [ ] 依下方已定案規格完成頁面 3「分析進度」。
-- [ ] 使用 HTMX polling 更新任務狀態與分析階段。
-- [ ] 任務完成後導向報告頁。
+- [x] 依下方已定案規格完成頁面 3「分析進度」。
+- [x] 使用 HTMX polling 更新任務狀態、分析階段與已抓留言數。
+- [x] 任務完成後停止 polling，顯示「查看分析報告」按鈕，由使用者主動進入報告頁。
 
-目前實作順序：
+目前已完成的執行順序：
 
 ```text
-1. 依已定案規格重做分析任務頁 UI
-2. 建立只回傳任務狀態區塊的 HTMX 端點與 polling
-3. 加入 Celery／Redis，讓 Selenium 不阻塞 Web Request
-4. 建立任務後派送第一筆 FetchRun
-5. 將抓取狀態與失敗原因即時反映到任務頁
-6. 串接 AI 分析與報告頁
+1. POST 建立 AnalysisJob 與第一筆 FetchRun
+2. 派送 Selenium 留言抓取工作並逐批保存資料及數量
+3. 抓取完成後派送 DeepSeek Report V2 分析工作
+4. 將任務狀態、目前階段、抓取數量與失敗原因反映到進度頁
+5. AI 結果通過 Schema 與來源驗證後保存 AnalysisResult
+6. 任務完成後由使用者點擊按鈕進入正式報告頁
 ```
 
 ### 頁面 3 已定案的 MVP 規格
@@ -206,9 +214,8 @@ YouTube 網址
 規劃狀態：
 
 ```text
-pending → running → awaiting_analysis → completed
-              ├── retry
-              └── failed
+pending → running（抓取）→ awaiting_analysis → running（AI／報告）→ completed
+    └──────────────── 任一執行階段失敗 → failed
 ```
 
 `cancelled` 狀態暫時保留在資料模型中，MVP 不提供操作介面。
@@ -222,17 +229,20 @@ pending → running → awaiting_analysis → completed
 
 ## 階段 6：AI 分析與報告頁
 
-目標：選定 AI 方案後，以可替換介面完成留言分析和頁面 4。
+目標：以可替換介面完成 DeepSeek 留言分析、可信來源驗證與頁面 4。
 
-- [ ] 確認 AI 模型、費用、資料限制與批次策略。
-- [ ] 定義 AI Provider 介面與結構化輸出 Schema。
-- [ ] 設計 `AnalysisResult` 模型並建立、審查及套用 migration。
-- [ ] 實作留言清理、分批、Token 預估與摘要合併。
-- [ ] 產生留言摘要、情緒、主題、常見問題、建議與負面回饋。
-- [ ] 驗證比例、分類數量與原始留言數一致。
-- [ ] 將模型名稱、Prompt 版本和分析時間寫入結果。
-- [ ] 完成頁面 4「影片分析報告」。
-- [ ] Desktop 與 Mobile 都移除 Top Comments。
+- [x] 選定 DeepSeek 與目前使用模型，API Key 僅由環境變數取得。
+- [ ] 定義正式費用預算、單次輸入上限與大量留言批次策略。
+- [x] 定義 Report V2 Provider 介面與嚴格結構化輸出 Schema。
+- [x] 設計 `AnalysisResult` 模型並建立、審查及套用 migration。
+- [x] 對全量留言建立正規化輸入、Python 精確統計、短引用與 Top 5 排名。
+- [ ] 實作大量留言分批、Token 預估與分批摘要合併。
+- [x] 產生整體摘要、討論氛圍、情緒估計、主要議題、Top 5、行為觀察與核心總結。
+- [x] 驗證情緒比例為整數且合計 100，樣本數、留言引用與 Top 5 均對應本次 FetchRun。
+- [x] 將模型名稱、Prompt 版本、分析時間與 Token 使用量寫入結果。
+- [x] 完成頁面 4「影片分析報告」及 Desktop／Mobile RWD。
+- [x] Desktop 使用表格、Mobile 使用卡片顯示影片最高讚留言 Top 5。
+- [x] 小型樣本限制為最多 2 個主要議題、2 個核心總結，且不產生行為觀察。
 - [ ] 加入重新分析與匯出功能的基礎流程。
 
 完成條件：
@@ -240,14 +250,17 @@ pending → running → awaiting_analysis → completed
 - 相同輸入與 Prompt 版本可以追蹤結果來源。
 - AI 回傳格式錯誤時不會寫入不完整報告。
 - 頁面 4 可顯示真實資料，不使用假 AI 結果冒充完成。
+- 報告內部的短引用會轉換成實際留言者顯示名稱，不直接顯示 c1、c2 等索引。
 
 ## 階段 7：測試、安全與可觀測性
 
 目標：讓專案不只在開發者電腦上偶爾成功，而是能驗證、診斷與安全運作。
 
-- [ ] Model、Service、Provider 和 View 單元測試。
-- [ ] HTMX 端點與完整主要流程整合測試。
-- [ ] Selenium 失敗情境和版面變動偵測測試。
+- [x] Model、Service、Provider 和 View 單元測試。
+- [x] HTMX 端點與完整主要流程整合測試。
+- [x] Selenium 解析、回覆展開、Emoji、去重與常見失敗情境測試。
+- [ ] 建立可重現的真實影片清單與 YouTube 版面變動偵測測試。
+- [x] 移除未被正式流程使用的 Report V1 DeepSeek Provider、執行 Service、Fake Provider 與舊測試。
 - [ ] 環境變數管理 Secret Key、API Key 與資料庫密碼。
 - [ ] 設定 production 的 `DEBUG`、`ALLOWED_HOSTS`、CSRF、HTTPS 與安全 Header。
 - [ ] 加入後端結構化 Log、健康檢查與錯誤追蹤。
@@ -264,6 +277,7 @@ pending → running → awaiting_analysis → completed
 
 目標：使用可重建的容器部署到 AWS EC2，並保留後續擴充空間。
 
+- [x] 建立開發環境 Redis／RedisInsight Compose。
 - [ ] 建立 Django Dockerfile 與 production 啟動方式。
 - [ ] 建立 Docker Compose：Nginx、Web、Worker、Redis、PostgreSQL。
 - [ ] 使用官方 Selenium Standalone Chrome 容器並固定版本。

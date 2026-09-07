@@ -8,9 +8,9 @@ from django.test import SimpleTestCase
 
 from .providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
 from .providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
-from .providers.deepseek_ai_provider import DeepSeekConfigurationError, DeepSeekResponseError
 from .providers.deepseek_report_v2_provider import (
-    DeepSeekReportV2Provider, REPORT_PROMPT_VERSION, SYSTEM_PROMPT_V2,
+    DeepSeekConfigurationError, DeepSeekReportV2Provider, DeepSeekResponseError,
+    REPORT_PROMPT_VERSION, SYSTEM_PROMPT_V2,
     build_report_user_message, parse_report_response,
 )
 from .services.ai_report_preparation_service import prepare_report_facts

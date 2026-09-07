@@ -11,8 +11,6 @@ from .ai_report_v2 import (
     AIReportV2, ReportInsightV2, ReportProvenanceV2, ReportTopicV2, ReportVideoV2,
     SentimentCategoryV2, SentimentEstimateV2, TopLikedCommentV2,
 )
-from .deepseek_ai_provider import DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL
-from .deepseek_ai_provider import DeepSeekConfigurationError, DeepSeekResponseError
 from analyses.services.ai_report_preparation_service import (
     PreparedReportFacts, apply_report_sample_scope, prepare_report_facts,
     replace_report_comment_refs_with_author_names,
@@ -20,7 +18,19 @@ from analyses.services.ai_report_preparation_service import (
 )
 
 
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
 REPORT_PROMPT_VERSION = "comment-analysis-v7"
+
+
+class DeepSeekConfigurationError(RuntimeError):
+    """DeepSeek Provider 設定不完整。"""
+
+
+class DeepSeekResponseError(ValueError):
+    """DeepSeek 回傳內容無法解析或不符合 Schema。"""
+
+
 SYSTEM_PROMPT_V2 = """
 你是一位分析 YouTube 留言的輿情資料分析師。以繁體中文撰寫有脈絡、有引用的報告。
 

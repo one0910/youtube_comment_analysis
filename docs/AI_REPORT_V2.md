@@ -115,13 +115,12 @@ API 中議題／洞察以 `evidence_comment_refs` 引用；Top 5 解讀用 `comm
   行為解讀的引用還必須屬於 Python 重複或活躍群組；這不能保證文字解讀的語意正確性。
 - `DeepSeekReportV2Provider(...).analyze_report(request, video, sort_order=..., include_replies=...)`
   才會發出真實 API 請求；可選 `source_label` 僅記錄來源標籤，不傳入 AI。
-  使用環境變數 `DEEPSEEK_API_KEY`，可注入模擬 client。沿用既有模型／端點設定，
+  使用環境變數 `DEEPSEEK_API_KEY`，可注入模擬 client。模型與端點設定由正式 V2 Provider 管理，
   JSON mode、非串流、max_tokens=12000；SDK timeout=120 秒、max_retries=0。
   不自動重試產生報告，避免解析失敗後悄悄重複付費。網路錯誤向上拋出。
 - 回應 finish_reason 必須是 stop；截斷、拒絕或空回應不建立報告。
   未取得 Token 數使用 null，不偽裝成 0。版本、時間與影片統計由 Python 記錄。
-- 回傳 `AIReportV2`，由 `report_v2_execution_service.py` 驗證後寫入 `AnalysisResult`；
-  舊版 `execute_ai_analysis()` 保留供舊契約測試，不再負責正式 V2 報告。
+- 回傳 `AIReportV2`，由 `report_v2_execution_service.py` 驗證後寫入 `AnalysisResult`。
 
 JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因此保留嚴格的 Python 驗證。
 參考 [DeepSeek 官方 JSON Output 說明](https://api-docs.deepseek.com/guides/json_mode/)。
