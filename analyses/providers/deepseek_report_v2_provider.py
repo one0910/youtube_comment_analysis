@@ -14,12 +14,13 @@ from .ai_report_v2 import (
 from .deepseek_ai_provider import DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL
 from .deepseek_ai_provider import DeepSeekConfigurationError, DeepSeekResponseError
 from analyses.services.ai_report_preparation_service import (
-    PreparedReportFacts, prepare_report_facts, replace_report_comment_refs_with_author_names,
+    PreparedReportFacts, apply_report_sample_scope, prepare_report_facts,
+    replace_report_comment_refs_with_author_names,
     validate_report_source_facts,
 )
 
 
-REPORT_PROMPT_VERSION = "comment-analysis-v6"
+REPORT_PROMPT_VERSION = "comment-analysis-v7"
 SYSTEM_PROMPT_V2 = """
 你是一位分析 YouTube 留言的輿情資料分析師。以繁體中文撰寫有脈絡、有引用的報告。
 
@@ -32,6 +33,7 @@ SYSTEM_PROMPT_V2 = """
 
 【Python 負責的事實】
 - video 是抓取時快照，null 為未知。exact_statistics 是實際分析的精確數量與模式。
+- report_constraints 是程式依樣本模式設定的報告上限與開關，必須遵守。null 表示沒有額外上限。
 - top_liked_comment_refs 是 Python 排定的本次樣本最高讚至多五則，包含主留言與回覆。
   每個指定 ref 恰好解讀一次，不增減、不另選替代留言；空清單就回傳空清單。
 - 原文、作者、讚數、影片資料、樣本數、重複次數與版本都由 Python 回填，不要輸出這些欄位。
@@ -48,7 +50,8 @@ SYSTEM_PROMPT_V2 = """
 
 【內容深度與情緒】
 - overall_summary 歸納整體討論；atmosphere 描述語氣、分歧及情緒指向。
-- small（1–29 則）：sentiment=null，僅提供謹慎的文字分析，不輸出任何情緒比例。
+- small（1–29 則）：sentiment=null，僅提供謹慎的文字分析，不輸出任何情緒比例；
+  topics 與 conclusions 各輸出 1–2 項，不得超過 2 項，behavior_insights 必須為 []。
 - medium（30–200 則）：概略情緒比例，原則上 2–3 個有依據的核心議題。
 - large（201 則以上）：完整分析，依資料豐富程度整理議題，不為湊數捏造。
 - sentiment 是整批 AI 估計，非逐則分類統計。三類 percentage 為 0–100 整數，總和 100。
@@ -57,7 +60,8 @@ SYSTEM_PROMPT_V2 = """
 - top_liked_comments 的 interpretation 解讀該則原文，勿把批評直接推論成拒投或消費轉換。
 - conclusions 是有留言引用支持的分項總結。
 - behavior_insights 只解讀 Python 提供的重複與活躍群組，引用必須屬於這些群組；
-  群組皆空時輸出 []。沒有精確時間，不聲稱短時間大量張貼。
+  small 模式不進行此項分析，固定輸出 []；其他模式在群組皆空時也輸出 []。
+  沒有精確時間，不聲稱短時間大量張貼。
 
 【嚴格 JSON 格式】
 只輸出一個 JSON object，沒有 Markdown code fence、HTML 或前言。不增加或省略欄位。
@@ -89,9 +93,15 @@ topics、conclusions、behavior_insights 每項至少引用一則實際留言。
 def build_report_user_message(facts: PreparedReportFacts) -> str:
     """傳送全量留言及額外事實；短引用以原始輸入順序建立，並非 Top 5 順序。"""
     id_to_ref = {c.youtube_comment_id: f"c{i}" for i, c in enumerate(facts.request.comments, 1)}
+    is_small = facts.sample.analysis_mode == "small"
     payload = {
         "video": asdict(facts.video),
         "exact_statistics": asdict(facts.sample),
+        "report_constraints": {
+            "max_topics": 2 if is_small else None,
+            "max_conclusions": 2 if is_small else None,
+            "include_behavior_insights": not is_small,
+        },
         "displayed_comment_count_difference": facts.displayed_comment_count_difference,
         "comments": [
             {"comment_ref": id_to_ref[c.youtube_comment_id],
@@ -105,12 +115,12 @@ def build_report_user_message(facts: PreparedReportFacts) -> str:
         "exact_repeated_text_groups": [
             {"normalized_text": g.normalized_text, "author_display_names": g.author_display_names,
              "occurrence_count": g.occurrence_count, "comment_refs": [id_to_ref[i] for i in g.comment_ids]}
-            for g in facts.repeated_text_groups
+            for g in (() if is_small else facts.repeated_text_groups)
         ],
         "exact_display_name_activity": [
             {"author_display_name": g.author_display_name, "thread_comment_ref": id_to_ref[g.thread_youtube_comment_id],
              "comment_count": g.comment_count, "comment_refs": [id_to_ref[i] for i in g.comment_ids]}
-            for g in facts.display_name_activity
+            for g in (() if is_small else facts.display_name_activity)
         ],
         "unresolved_thread_comment_refs": [id_to_ref[i] for i in facts.unresolved_thread_comment_ids],
     }
@@ -205,7 +215,8 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
         for item in _list(payload[section]):
             _object(item, {"title", "description", "evidence_comment_refs"})
             ids = resolve_refs(item["evidence_comment_refs"])
-            if section == "behavior_insights" and not set(ids).issubset(behavior_ids):
+            if (section == "behavior_insights" and facts.sample.analysis_mode != "small"
+                    and not set(ids).issubset(behavior_ids)):
                 raise ValueError("行為解讀必須引用 Python 統計群組內的留言。")
             items.append(ReportInsightV2(item["title"], item["description"], ids))
         sections[section] = tuple(items)
@@ -226,6 +237,7 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
         risks=(), recommendations=(), **sections,
     )
     report = replace_report_comment_refs_with_author_names(report, facts)
+    report = apply_report_sample_scope(report)
     validate_report_source_facts(report, facts)
     return report
 

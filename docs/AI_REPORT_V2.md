@@ -50,6 +50,7 @@
 - `sample`：`analyzed_comment_count`、`top_level_comment_count`、`reply_comment_count`、
   `sort_order`（newest/top）、`include_replies`；`analysis_mode` 由 Python 決定。
 - 1–29 則 small；30–200 則 medium；201 則以上 large。0 則不呼叫 AI、不建立報告。
+- small 的主要議題與總結各最多 2 項，不傳送重複／活躍群組給 AI，且不產生或顯示行為觀察區塊。
 - 主留言＋回覆＝分析數。這是本次送入的樣本，不是宣稱取得全部公開留言。
 - 顯示數差異由資料整理層算 `video.displayed_comment_count - sample.analyzed_comment_count`；
   顯示數未知時差異也未知；負差異不可硬改成零，也不可一律解釋成漏抓。
@@ -102,8 +103,8 @@ API 中議題／洞察以 `evidence_comment_refs` 引用；Top 5 解讀用 `comm
 不要求模型計算樣本數、挑選排名、計算重複次數、產出 Preview 或 HTML。
 已實作於 `analyses/providers/deepseek_report_v2_provider.py`：
 
-- `SYSTEM_PROMPT_V2`：新版系統提示；`REPORT_PROMPT_VERSION = comment-analysis-v6`。
-  提示詞版本 v5 對應報告格式 `comment-analysis-result-v2`，兩者是不同的版本軸。
+- `SYSTEM_PROMPT_V2`：新版系統提示；`REPORT_PROMPT_VERSION = comment-analysis-v7`。
+  提示詞版本與報告格式 `comment-analysis-result-v2` 是不同的版本軸。
 - `build_report_user_message(facts)`：全量留言、Preview、精確統計與額外 Top 5／行為群組，
   全部留言依輸入順序使用 c1、c2 等短引用；排名不影響整體分析範圍。
 - `parse_report_response(content, facts, provenance)`：離線解析與組裝 `AIReportV2`。

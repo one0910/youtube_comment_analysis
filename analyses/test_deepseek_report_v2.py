@@ -39,6 +39,22 @@ class DeepSeekReportV2Tests(SimpleTestCase):
     def prepare(self, request):
         return prepare_report_facts(request, self.video, sort_order="newest", include_replies=True)
 
+    def prepare_medium(self, comments=None):
+        comments = self.comments if comments is None else comments
+        extras = tuple(
+            replace(
+                self.comments[0],
+                sequence=len(comments) + i + 1,
+                youtube_comment_id=f"extra-{i}",
+                parent_youtube_comment_id=None,
+                author_display_name=f"@extra-{i}",
+                comment_text=f"額外留言 {i}",
+                like_count=0,
+            )
+            for i in range(30 - len(comments))
+        )
+        return self.prepare(replace(self.request, comments=comments + extras))
+
     def parse(self, payload=None, facts=None):
         return parse_report_response(json.dumps(self.payload if payload is None else payload),
                                      self.facts if facts is None else facts, self.provenance)
@@ -66,12 +82,29 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         self.assertEqual(payload["displayed_comment_count_difference"], 4)
         self.assertNotIn("original-", build_report_user_message(self.facts))
 
+    def test_small_user_message_omits_behavior_groups_and_sets_limits(self):
+        comments = (
+            self.comments[0],
+            replace(self.comments[1], comment_text=self.comments[0].comment_text),
+        ) + self.comments[2:]
+        facts = self.prepare(replace(self.request, comments=comments))
+
+        payload = json.loads(build_report_user_message(facts))
+
+        self.assertEqual(payload["report_constraints"], {
+            "max_topics": 2,
+            "max_conclusions": 2,
+            "include_behavior_insights": False,
+        })
+        self.assertEqual(payload["exact_repeated_text_groups"], [])
+        self.assertEqual(payload["exact_display_name_activity"], [])
+
     def test_parent_group_and_unresolved_refs_are_mapped(self):
         root = replace(self.comments[0], comment_text=" 相同\n文字 ")
         reply = replace(self.comments[1], parent_youtube_comment_id=root.youtube_comment_id,
                         author_display_name=root.author_display_name, comment_text="相同 文字")
         orphan = replace(self.comments[2], parent_youtube_comment_id="missing-original-id")
-        facts = self.prepare(replace(self.request, comments=(reply, root, orphan)))
+        facts = self.prepare_medium((reply, root, orphan))
         message = build_report_user_message(facts)
         payload = json.loads(message)
         self.assertEqual(payload["comments"][0]["parent_comment_ref"], "c2")
@@ -167,8 +200,7 @@ class DeepSeekReportV2Tests(SimpleTestCase):
                 for key, number in (("positive", 35), ("neutral", 45), ("negative", 20))}
 
     def medium_facts(self):
-        extra = tuple(replace(self.comments[0], youtube_comment_id=f"extra-{i}", like_count=0) for i in range(24))
-        return self.prepare(replace(self.request, comments=self.comments + extra))
+        return self.prepare_medium()
 
     def test_small_sample_rejects_percentages_medium_requires_them(self):
         with self.assertRaises(DeepSeekResponseError):
@@ -179,6 +211,21 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         self.assertEqual(report.sample.analyzed_comment_count, 30)
         self.assertEqual(report.sentiment.method, "ai_batch_estimate")
         self.assertEqual(set(asdict(report.sentiment.positive)), {"percentage", "description"})
+
+    def test_small_sample_caps_topics_and_conclusions_and_drops_behavior(self):
+        payload = copy.deepcopy(self.payload)
+        payload["topics"] *= 3
+        payload["conclusions"] *= 3
+        payload["behavior_insights"] = [
+            {"title": "行為觀察", "description": "模型不應輸出的小樣本行為觀察。",
+             "evidence_comment_refs": ["c1"]},
+        ]
+
+        report = self.parse(payload)
+
+        self.assertEqual(len(report.topics), 2)
+        self.assertEqual(len(report.conclusions), 2)
+        self.assertEqual(report.behavior_insights, ())
 
     def test_percentages_are_strict_and_must_total_100(self):
         for number in (True, "35", 35.0, -1, 101, 34):
@@ -194,17 +241,18 @@ class DeepSeekReportV2Tests(SimpleTestCase):
     def test_behavior_cannot_be_invented_when_program_groups_are_empty(self):
         item = {"title": "重複發言", "description": "聲稱重複", "evidence_comment_refs": ["c1"]}
         with self.assertRaises(DeepSeekResponseError):
-            self.parse({**self.payload, "behavior_insights": [item]})
+            self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]},
+                       self.medium_facts())
 
     def test_program_groups_restored_and_behavior_refs_validated(self):
         comments = (self.comments[0], replace(self.comments[1], comment_text=self.comments[0].comment_text)) + self.comments[2:]
-        facts = self.prepare(replace(self.request, comments=comments))
+        facts = self.prepare_medium(comments)
         item = {"title": "相同文字", "description": "兩個顯示名稱使用相同文字。", "evidence_comment_refs": ["c1", "c2"]}
-        report = self.parse({**self.payload, "behavior_insights": [item]}, facts)
+        report = self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]}, facts)
         self.assertEqual(report.repeated_text_groups[0].occurrence_count, 2)
         item["evidence_comment_refs"] = ["c3"]
         with self.assertRaises(DeepSeekResponseError):
-            self.parse({**self.payload, "behavior_insights": [item]}, facts)
+            self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]}, facts)
 
     def test_conclusions_and_behavior_require_evidence(self):
         for section in ("conclusions", "behavior_insights"):
@@ -272,7 +320,8 @@ class DeepSeekReportV2Tests(SimpleTestCase):
 
     def test_prompt_preserves_full_sample_and_uncertainty_rules(self):
         for phrase in ("全部留言", "非逐則分類統計", "不可信任資料", "顯示名稱不等於唯一帳號", "不可發明引用",
-                       "所有自然語言欄位都不可出現", "author_display_name"):
+                       "所有自然語言欄位都不可出現", "author_display_name",
+                       "topics 與 conclusions 各輸出 1–2 項", "small 模式不進行此項分析"):
             self.assertIn(phrase, SYSTEM_PROMPT_V2)
         for removed_field in ('"risks"', '"recommendations"', '"limitations"'):
             self.assertNotIn(removed_field, SYSTEM_PROMPT_V2)

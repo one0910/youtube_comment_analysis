@@ -200,3 +200,15 @@ def replace_report_comment_refs_with_author_names(
         risks=replace_insights(report.risks),
         recommendations=replace_insights(report.recommendations),
     )
+
+
+def apply_report_sample_scope(report: AIReportV2) -> AIReportV2:
+    """小型樣本只保留必要的洞察，避免少量留言被過度拆分。"""
+    if report.sample.analysis_mode != "small":
+        return report
+    return replace(
+        report,
+        topics=report.topics[:2],
+        conclusions=report.conclusions[:2],
+        behavior_insights=(),
+    )

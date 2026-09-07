@@ -95,6 +95,24 @@ class ReportV2PreviewTests(SimpleTestCase):
         self.assertNotContains(response, 'data-testid="sentiment-donut"')
         self.assertIsNone(response.context["report"].sentiment)
         self.assertContains(response, "Top 3")
+        self.assertNotContains(response, "重複內容與活躍發言觀察")
+        self.assertNotContains(response, "Behavioral Observations")
+
+    def test_small_context_caps_historical_insights_and_hides_behavior(self):
+        report, facts = build_report_preview_fixture(small=True)
+        report = replace(
+            report,
+            topics=report.topics + (report.topics[0],),
+            conclusions=report.conclusions + (report.conclusions[0],),
+            behavior_insights=(report.conclusions[0],),
+        )
+
+        context = build_report_preview_context(report, facts)
+
+        self.assertEqual(len(context["topic_panels"]), 2)
+        self.assertEqual(len(context["conclusion_panels"]), 2)
+        self.assertEqual(context["behavior_panels"], [])
+        self.assertFalse(context["show_behavior_section"])
 
     @override_settings(DEBUG=False)
     @patch("analyses.report_v2_views.build_report_preview_fixture")
