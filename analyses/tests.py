@@ -81,6 +81,7 @@ from .providers.deepseek_ai_provider import (
     DeepSeekResponseError,
 )
 from .providers.selenium_youtube_provider import (
+    COMMENT_ELEMENT_DATA_SCRIPT,
     VIDEO_COMMENT_THREAD_SELECTOR,
     InvalidYouTubeCommentElementError,
     SeleniumYouTubeProvider,
@@ -403,6 +404,12 @@ class SeleniumYouTubeLikeCountTests(SimpleTestCase):
 """測試 Selenium 將單一 YouTube 留言元素轉成共用 DTO。"""
 class SeleniumYouTubeCommentElementTests(SimpleTestCase):
 
+    def test_comment_script_converts_inline_images_to_alt_text(self):
+        """YouTube 以圖片呈現的 Emoji 應依原始位置轉回 alt 文字。"""
+
+        self.assertIn('querySelectorAll("img[alt]")', COMMENT_ELEMENT_DATA_SCRIPT)
+        self.assertIn('document.createTextNode(imageElement.getAttribute("alt")', COMMENT_ELEMENT_DATA_SCRIPT)
+
     def test_comment_id_is_read_from_lc_query_parameter(self):
         """留言時間連結中的 lc 應作為穩定留言 ID。"""
 
@@ -459,6 +466,49 @@ class SeleniumYouTubeCommentElementTests(SimpleTestCase):
         self.assertEqual(comment_data.like_count, 12_000)
         self.assertEqual(comment_data.published_time_text, "2 天前")
         self.assertTrue(comment_data.is_pinned)
+
+    def test_emoji_only_comment_is_preserved_as_text(self):
+        """純 Emoji 留言不可因 YouTube 使用 img 元素而變成空字串。"""
+
+        chrome_driver = MagicMock()
+        chrome_driver.execute_script.return_value = {
+            "comment_link_url": "/watch?v=dQw4w9WgXcQ&lc=UgzEmoji123",
+            "author_display_name": "@emoji-author",
+            "author_channel_url": "/@emoji-author",
+            "comment_text": "🤣🤣🤣👍👍👍👍",
+            "like_count_text": "",
+            "published_time_text": "2 小時前",
+            "is_pinned": False,
+        }
+
+        comment_data = get_youtube_comment_data_from_element(
+            chrome_driver=chrome_driver,
+            comment_element=MagicMock(),
+            youtube_video_id="dQw4w9WgXcQ",
+        )
+
+        self.assertEqual(comment_data.comment_text, "🤣🤣🤣👍👍👍👍")
+
+    def test_blank_comment_is_rejected_during_selenium_extraction(self):
+        """無法讀取的空白留言應在抓取階段失敗，不可流入 AI 輸入。"""
+
+        chrome_driver = MagicMock()
+        chrome_driver.execute_script.return_value = {
+            "comment_link_url": "/watch?v=dQw4w9WgXcQ&lc=UgzBlank123",
+            "author_display_name": "@blank-author",
+            "author_channel_url": "/@blank-author",
+            "comment_text": "   ",
+            "like_count_text": "",
+            "published_time_text": "2 小時前",
+            "is_pinned": False,
+        }
+
+        with self.assertRaisesRegex(InvalidYouTubeCommentElementError, "留言內容為空白"):
+            get_youtube_comment_data_from_element(
+                chrome_driver=chrome_driver,
+                comment_element=MagicMock(),
+                youtube_video_id="dQw4w9WgXcQ",
+            )
 
     def test_non_dictionary_script_result_is_rejected(self):
         """YouTube DOM 結構失效時應回報明確錯誤。"""

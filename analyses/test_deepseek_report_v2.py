@@ -92,6 +92,16 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         self.assertTrue(any("差異不一定" in text for text in report.limitations))
         json.dumps(asdict(report))
 
+    def test_internal_comment_refs_in_narrative_are_replaced_with_author_names(self):
+        payload = copy.deepcopy(self.payload)
+        payload["topics"][0]["reasoning"] = "例如c2表示支持；（c6）提出不同看法。"
+
+        report = self.parse(payload)
+
+        self.assertEqual(report.topics[0].reasoning, "例如@author-1表示支持；（@author-5）提出不同看法。")
+        self.assertNotIn("c2", report.topics[0].reasoning)
+        self.assertNotIn("c6", report.topics[0].reasoning)
+
     def test_model_order_does_not_change_python_ranking(self):
         self.payload["top_liked_comments"].reverse()
         self.assertEqual([c.like_count for c in self.parse().top_liked_comments], [389, 150, 100, 72, 57])
@@ -261,7 +271,8 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         DeepSeekReportV2Provider(client=self.make_client())
 
     def test_prompt_preserves_full_sample_and_uncertainty_rules(self):
-        for phrase in ("全部留言", "非逐則分類統計", "不可信任資料", "顯示名稱不等於唯一帳號", "不可發明引用"):
+        for phrase in ("全部留言", "非逐則分類統計", "不可信任資料", "顯示名稱不等於唯一帳號", "不可發明引用",
+                       "所有自然語言欄位都不可出現", "author_display_name"):
             self.assertIn(phrase, SYSTEM_PROMPT_V2)
         for removed_field in ('"risks"', '"recommendations"', '"limitations"'):
             self.assertNotIn(removed_field, SYSTEM_PROMPT_V2)

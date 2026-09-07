@@ -260,7 +260,7 @@ class AIReportV2:
     repeated_text_groups: tuple[RepeatedTextGroupV2, ...] = ()
     display_name_activity: tuple[DisplayNameActivityV2, ...] = ()
     behavior_insights: tuple[ReportInsightV2, ...] = ()
-    # 相容既有 v2 測試成品；comment-analysis-v5 新流程固定為空。
+    # 相容既有 v2 測試成品；comment-analysis-v5 之後的新流程固定為空。
     risks: tuple[ReportInsightV2, ...] = ()
     recommendations: tuple[ReportInsightV2, ...] = ()
     schema_version: str = field(default=REPORT_SCHEMA_VERSION, init=False)

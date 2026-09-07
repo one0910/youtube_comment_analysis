@@ -5,7 +5,11 @@ import json
 from analyses.providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
 from analyses.providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
 from analyses.providers.deepseek_report_v2_provider import parse_report_response
-from .ai_report_preparation_service import prepare_report_facts, validate_report_source_facts
+from .ai_report_preparation_service import (
+    prepare_report_facts,
+    replace_report_comment_refs_with_author_names,
+    validate_report_source_facts,
+)
 
 
 def build_report_preview_fixture(*, small: bool = False):
@@ -98,6 +102,7 @@ def build_report_preview_fixture(*, small: bool = False):
 
 def build_report_preview_context(report, facts, *, is_fixture: bool = True, is_preview: bool = True) -> dict:
     validate_report_source_facts(report, facts)
+    report = replace_report_comment_refs_with_author_names(report, facts)
     comments = {c.youtube_comment_id: c for c in facts.request.comments}
     analysis_mode = report.sample.analysis_mode.value
     sample_mode_details = {

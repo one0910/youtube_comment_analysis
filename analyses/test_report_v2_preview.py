@@ -123,6 +123,17 @@ class ReportV2PreviewTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             build_report_preview_context(replace(report, video=replace(report.video, view_count=999)), facts)
 
+    def test_context_replaces_historical_internal_refs_with_author_names(self):
+        report, facts = build_report_preview_fixture()
+        topic = replace(report.topics[0], reasoning="c1 與 c2 都提到人工核對。")
+
+        context = build_report_preview_context(replace(report, topics=(topic,)), facts)
+
+        reasoning = context["topic_panels"][0]["item"].reasoning
+        self.assertEqual(reasoning, "@示範觀眾_01 與 @示範觀眾_02 都提到人工核對。")
+        self.assertNotIn("c1", reasoning)
+        self.assertNotIn("c2", reasoning)
+
     def test_topic_panels_show_at_most_three_representative_comments(self):
         report, facts = build_report_preview_fixture()
         topic = replace(report.topics[0], evidence_comment_ids=("demo-1", "demo-2", "demo-3", "demo-4"))

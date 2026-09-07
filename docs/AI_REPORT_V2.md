@@ -32,8 +32,8 @@
 | display_name_activity | DisplayNameActivityV2 清單 | Python；同顯示名稱在同討論串的多則發言 |
 | behavior_insights | ReportInsightV2 清單 | AI；對已計算現象的保守解讀 |
 | conclusions | ReportInsightV2 清單 | AI；分項總結 |
-| risks | 空清單 | 僅供舊 v2 測試成品相容；comment-analysis-v5 不再要求 AI 輸出 |
-| recommendations | 空清單 | 僅供舊 v2 測試成品相容；comment-analysis-v5 不再要求 AI 輸出 |
+| risks | 空清單 | 僅供舊 v2 測試成品相容；comment-analysis-v5 之後不再要求 AI 輸出 |
+| recommendations | 空清單 | 僅供舊 v2 測試成品相容；comment-analysis-v5 之後不再要求 AI 輸出 |
 | limitations | 非空文字清單 | 由 Python 產生的內部限制記錄，不要求 AI 輸出、不在報告頁顯示 |
 | identity_notice | 固定字串 | Python；顯示名稱非唯一身分，不以重複發言證明操作 |
 | provenance | ReportProvenanceV2 | 程式記錄供應商、模型、提示詞版本、時間、Token |
@@ -102,7 +102,7 @@ API 中議題／洞察以 `evidence_comment_refs` 引用；Top 5 解讀用 `comm
 不要求模型計算樣本數、挑選排名、計算重複次數、產出 Preview 或 HTML。
 已實作於 `analyses/providers/deepseek_report_v2_provider.py`：
 
-- `SYSTEM_PROMPT_V2`：新版系統提示；`REPORT_PROMPT_VERSION = comment-analysis-v5`。
+- `SYSTEM_PROMPT_V2`：新版系統提示；`REPORT_PROMPT_VERSION = comment-analysis-v6`。
   提示詞版本 v5 對應報告格式 `comment-analysis-result-v2`，兩者是不同的版本軸。
 - `build_report_user_message(facts)`：全量留言、Preview、精確統計與額外 Top 5／行為群組，
   全部留言依輸入順序使用 c1、c2 等短引用；排名不影響整體分析範圍。

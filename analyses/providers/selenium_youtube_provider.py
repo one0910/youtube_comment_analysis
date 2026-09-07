@@ -98,12 +98,22 @@ COMMENT_ELEMENT_DATA_SCRIPT = """
 const commentElement = arguments[0];
 const getText = (selector) => commentElement.querySelector(selector)?.textContent?.trim() || "";
 const getAttribute = (selector, attributeName) => commentElement.querySelector(selector)?.getAttribute(attributeName) || "";
+const getCommentText = () => {
+    const contentElement = commentElement.querySelector("#content-text");
+    if (!contentElement) {return ""}
+
+    const contentClone = contentElement.cloneNode(true);
+    contentClone.querySelectorAll("img[alt]").forEach((imageElement) => {
+        imageElement.replaceWith(document.createTextNode(imageElement.getAttribute("alt") || ""));
+    });
+    return contentClone.textContent?.trim() || "";
+};
 
 return {
     comment_link_url: getAttribute("#published-time-text a", "href"),
     author_display_name: getText("#author-text span"),
     author_channel_url: getAttribute("#author-text", "href"),
-    comment_text: getText("#content-text"),
+    comment_text: getCommentText(),
     like_count_text: getText("#vote-count-middle"),
     published_time_text: getText("#published-time-text a"),
     is_pinned: commentElement.hasAttribute("pinned")
@@ -151,6 +161,10 @@ def get_youtube_comment_data_from_element(
 
     comment_link_url = comment_element_data.get("comment_link_url","").strip()
     author_channel_url = comment_element_data.get("author_channel_url","").strip()
+    comment_text = comment_element_data.get("comment_text", "")
+
+    if not isinstance(comment_text, str) or not comment_text.strip():
+        raise InvalidYouTubeCommentElementError("YouTube 留言內容為空白或尚未載入。")
     
     if author_channel_url:
         complete_author_channel_url = urljoin(YOUTUBE_ORIGIN_URL, author_channel_url)
@@ -164,7 +178,7 @@ def get_youtube_comment_data_from_element(
         parent_youtube_comment_id=parent_youtube_comment_id,
         author_display_name=comment_element_data.get("author_display_name","",).strip() or None,
         author_channel_url=complete_author_channel_url,
-        comment_text=comment_element_data.get("comment_text", "").strip(),
+        comment_text=comment_text.strip(),
         like_count=get_comment_like_count(comment_element_data.get("like_count_text" ,"",)),
         published_time_text=comment_element_data.get("published_time_text", "").strip() or None,
         is_pinned=bool(comment_element_data.get("is_pinned", False)),

@@ -14,11 +14,12 @@ from .ai_report_v2 import (
 from .deepseek_ai_provider import DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL
 from .deepseek_ai_provider import DeepSeekConfigurationError, DeepSeekResponseError
 from analyses.services.ai_report_preparation_service import (
-    PreparedReportFacts, prepare_report_facts, validate_report_source_facts,
+    PreparedReportFacts, prepare_report_facts, replace_report_comment_refs_with_author_names,
+    validate_report_source_facts,
 )
 
 
-REPORT_PROMPT_VERSION = "comment-analysis-v5"
+REPORT_PROMPT_VERSION = "comment-analysis-v6"
 SYSTEM_PROMPT_V2 = """
 你是一位分析 YouTube 留言的輿情資料分析師。以繁體中文撰寫有脈絡、有引用的報告。
 
@@ -34,7 +35,10 @@ SYSTEM_PROMPT_V2 = """
 - top_liked_comment_refs 是 Python 排定的本次樣本最高讚至多五則，包含主留言與回覆。
   每個指定 ref 恰好解讀一次，不增減、不另選替代留言；空清單就回傳空清單。
 - 原文、作者、讚數、影片資料、樣本數、重複次數與版本都由 Python 回填，不要輸出這些欄位。
-- 引用只使用本次 comment_ref，例如 c1、c2；不可發明引用或輸出原始留言 ID。
+- 引用欄位只使用本次 comment_ref，例如 c1、c2；不可發明引用或輸出原始留言 ID。
+- comment_ref 只能出現在 comment_ref、evidence_comment_refs 等 JSON 引用欄位。
+  所有自然語言欄位都不可出現 c1、c2 這類內部編號；如需指出留言者，使用 comments 中的
+  author_display_name 原樣呈現，例如 @example，不可自行改寫或猜測帳號。
 - parent_comment_ref=null 且 is_reply=true 表示父留言不在輸入，不代表它是主留言。
 - exact_repeated_text_groups 只合併文字空白，可跨顯示名稱；不是語意相似度檢測。
 - exact_display_name_activity 計算同顯示名稱、同根討論串的多則發言。
@@ -221,6 +225,7 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
         display_name_activity=facts.display_name_activity, limitations=tuple(dict.fromkeys(limitations)),
         risks=(), recommendations=(), **sections,
     )
+    report = replace_report_comment_refs_with_author_names(report, facts)
     validate_report_source_facts(report, facts)
     return report
 

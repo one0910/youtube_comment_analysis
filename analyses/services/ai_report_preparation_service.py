@@ -1,12 +1,16 @@
 """新版報告的純 Python 事實整理；不讀寫資料庫、不呼叫 AI、不裁切分析留言。"""
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import re
 
 from analyses.providers.ai_analysis_provider import AIAnalysisRequest, AICommentInput
 from analyses.providers.ai_report_v2 import (
     AIReportV2, DisplayNameActivityV2, RepeatedTextGroupV2, ReportSampleV2, ReportVideoV2,
 )
+
+
+_INTERNAL_COMMENT_REF_PATTERN = re.compile(r"(?<![A-Za-z0-9_])c([1-9][0-9]*)(?![A-Za-z0-9_])")
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,3 +144,59 @@ def validate_report_source_facts(report: AIReportV2, facts: PreparedReportFacts)
     for item in (*report.topics, *report.conclusions, *report.behavior_insights, *report.risks, *report.recommendations):
         if not set(item.evidence_comment_ids).issubset(source_ids):
             raise ValueError("報告引用了不屬於本次輸入的留言 ID。")
+
+
+def replace_report_comment_refs_with_author_names(
+    report: AIReportV2,
+    facts: PreparedReportFacts,
+) -> AIReportV2:
+    """將 AI 敘述中意外洩漏的 cN 短引用換成來源留言者顯示名稱。"""
+    reference_map = {
+        f"c{index}": comment.author_display_name
+        for index, comment in enumerate(facts.request.comments, 1)
+    }
+
+    def replace_text(value: str) -> str:
+        def replace_match(match: re.Match) -> str:
+            return reference_map.get(match.group(0), match.group(0))
+
+        return _INTERNAL_COMMENT_REF_PATTERN.sub(replace_match, value)
+
+    sentiment = report.sentiment
+    if sentiment is not None:
+        sentiment = replace(
+            sentiment,
+            positive=replace(sentiment.positive, description=replace_text(sentiment.positive.description)),
+            neutral=replace(sentiment.neutral, description=replace_text(sentiment.neutral.description)),
+            negative=replace(sentiment.negative, description=replace_text(sentiment.negative.description)),
+        )
+
+    def replace_insights(items):
+        return tuple(
+            replace(item, title=replace_text(item.title), description=replace_text(item.description))
+            for item in items
+        )
+
+    return replace(
+        report,
+        overall_summary=replace_text(report.overall_summary),
+        atmosphere=replace_text(report.atmosphere),
+        sentiment=sentiment,
+        topics=tuple(
+            replace(
+                topic,
+                name=replace_text(topic.name),
+                summary=replace_text(topic.summary),
+                reasoning=replace_text(topic.reasoning),
+            )
+            for topic in report.topics
+        ),
+        top_liked_comments=tuple(
+            replace(comment, interpretation=replace_text(comment.interpretation))
+            for comment in report.top_liked_comments
+        ),
+        behavior_insights=replace_insights(report.behavior_insights),
+        conclusions=replace_insights(report.conclusions),
+        risks=replace_insights(report.risks),
+        recommendations=replace_insights(report.recommendations),
+    )
