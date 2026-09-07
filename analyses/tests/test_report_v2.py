@@ -5,7 +5,7 @@ from dataclasses import asdict, replace
 
 from django.test import SimpleTestCase
 
-from .providers import ai_report_v2 as v2
+from ..providers import ai_report_v2 as v2
 
 
 class AIReportV2ContractTests(SimpleTestCase):

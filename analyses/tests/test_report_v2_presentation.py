@@ -5,9 +5,9 @@ from django.test import SimpleTestCase, override_settings
 from django.shortcuts import render
 from django.urls import NoReverseMatch, include, path, reverse
 
-from . import urls as analyses_urls
-from .services.report_v2_presentation_service import build_report_context
-from .testing.report_v2_factory import build_report_test_fixture
+from .. import urls as analyses_urls
+from ..services.report_v2_presentation_service import build_report_context
+from .report_v2_factory import build_report_test_fixture
 
 
 def report_template_test_view(request):
@@ -139,7 +139,7 @@ class ReportV2PresentationTests(SimpleTestCase):
         report, facts = build_report_test_fixture()
         attack = '<script>alert("x")</script>'
         report = replace(report, overall_summary=attack)
-        with patch("analyses.test_report_v2_presentation.build_report_test_fixture", return_value=(report, facts)):
+        with patch("analyses.tests.test_report_v2_presentation.build_report_test_fixture", return_value=(report, facts)):
             response = self.client.get(self.url)
         self.assertNotContains(response, attack)
         self.assertContains(response, "&lt;script&gt;")
@@ -173,7 +173,7 @@ class ReportV2PresentationTests(SimpleTestCase):
     def test_unknown_video_counts_are_displayed_as_unknown_not_none_or_zero(self):
         report, facts = build_report_test_fixture()
         video = replace(report.video, view_count=None, like_count=None, displayed_comment_count=None)
-        with patch("analyses.test_report_v2_presentation.build_report_test_fixture", return_value=(replace(report, video=video), replace(facts, video=video))):
+        with patch("analyses.tests.test_report_v2_presentation.build_report_test_fixture", return_value=(replace(report, video=video), replace(facts, video=video))):
             response = self.client.get(self.url)
         self.assertContains(response, "影片按讚 未知")
         self.assertContains(response, "YouTube 顯示留言 未知")

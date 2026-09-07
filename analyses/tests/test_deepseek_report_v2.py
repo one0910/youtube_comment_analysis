@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from .providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
-from .providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
-from .providers.deepseek_report_v2_provider import (
+from ..providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
+from ..providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
+from ..providers.deepseek_report_v2_provider import (
     DeepSeekConfigurationError, DeepSeekReportV2Provider, DeepSeekResponseError,
     REPORT_PROMPT_VERSION, SYSTEM_PROMPT_V2,
     build_report_user_message, parse_report_response,
 )
-from .services.ai_report_preparation_service import prepare_report_facts
+from ..services.ai_report_preparation_service import prepare_report_facts
 
 
 class DeepSeekReportV2Tests(SimpleTestCase):

@@ -2,9 +2,9 @@ from dataclasses import replace
 
 from django.test import SimpleTestCase
 
-from .providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
-from .providers import ai_report_v2 as v2
-from .services.ai_report_preparation_service import prepare_report_facts, validate_report_source_facts
+from ..providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
+from ..providers import ai_report_v2 as v2
+from ..services.ai_report_preparation_service import prepare_report_facts, validate_report_source_facts
 
 
 def comment(comment_id, likes=0, *, sequence=1, author="@demo", text="測試留言", parent=None):

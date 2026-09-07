@@ -155,12 +155,12 @@ JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因�
 ## 5. 驗證指令
 
 ```powershell
-python manage.py test analyses.test_report_v2 -v 2
-python manage.py test analyses.test_report_preparation -v 2
-python manage.py test analyses.test_deepseek_report_v2 -v 2
-python manage.py test analyses.test_report_v2_presentation -v 2
-python manage.py test analyses.test_report_v2_artifact -v 2
-python manage.py test analyses.test_report_v2_execution -v 2
+python manage.py test analyses.tests.test_report_v2 -v 2
+python manage.py test analyses.tests.test_report_preparation -v 2
+python manage.py test analyses.tests.test_deepseek_report_v2 -v 2
+python manage.py test analyses.tests.test_report_v2_presentation -v 2
+python manage.py test analyses.tests.test_report_v2_artifact -v 2
+python manage.py test analyses.tests.test_report_v2_execution -v 2
 python manage.py test analyses -v 1
 ```
 
@@ -171,7 +171,7 @@ python manage.py test analyses -v 1
 - 正式流程只透過 `/analyses/jobs/<analysis-job-id>/report/` 顯示已完成並經來源驗證的報告。
 - 開發階段使用的模擬與真實成品預覽 URL 已移除，不再暴露額外報告入口。
 - `report_v2_presentation_service.py` 只負責將已驗證的報告轉成畫面所需的 context。
-- 模擬資料已移至 `analyses/testing/report_v2_factory.py`，僅供離線測試使用，不對外提供路由。
+- 模擬資料位於 `analyses/tests/report_v2_factory.py`，僅供離線測試使用，不對外提供路由。
 - `report_v2.html` 使用專案既有的 Tailwind v4 bundle 與現有 base/sidebar；已移除獨立的
   `report-v2.css`，避免維護兩套設計系統。沒有引入 Stitch 的 CDN Tailwind、固定頁面高度、
   隱藏 scrollbar 或未實作的操作。

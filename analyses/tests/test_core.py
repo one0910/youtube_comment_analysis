@@ -10,40 +10,40 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from selenium.common.exceptions import TimeoutException
 
-from .forms import NewAnalysisForm
-from .models import AnalysisJob, AnalysisResult, Comment, CommentObservation, FetchRun, Video
-from .services.youtube_url_parser import (
+from ..forms import NewAnalysisForm
+from ..models import AnalysisJob, AnalysisResult, Comment, CommentObservation, FetchRun, Video
+from ..services.youtube_url_parser import (
     InvalidYouTubeUrlError,
     get_video_id_from_youtube_url,
 )
-from .services.youtube_count_parser import (
+from ..services.youtube_count_parser import (
     InvalidYouTubeCountTextError,
     convert_youtube_count_text_to_integer,
 )
 
-from .services.youtube_video_storage_service import (
+from ..services.youtube_video_storage_service import (
     save_or_update_video_from_preview_data,
 )
 
-from .services.analysis_job_creation_service import (
+from ..services.analysis_job_creation_service import (
     create_pending_analysis_job_for_video,
 )
-from .services.fetch_run_execution_service import (
+from ..services.fetch_run_execution_service import (
     YouTubeProviderUnavailableError,
     execute_youtube_fetch_run,
     execute_youtube_fetch_run_by_id,
 )
-from .services.analysis_job_progress_service import (
+from ..services.analysis_job_progress_service import (
     AnalysisStageState,
     build_analysis_stage_presentations,
 )
-from .services.ai_analysis_request_service import (
+from ..services.ai_analysis_request_service import (
     AIAnalysisInputUnavailableError,
     build_ai_analysis_request_from_fetch_run,
 )
-from .tasks import execute_report_v2_analysis_task, execute_youtube_fetch_run_task
+from ..tasks import execute_report_v2_analysis_task, execute_youtube_fetch_run_task
 
-from .providers.youtube_provider import (
+from ..providers.youtube_provider import (
     YouTubeCommentData,
     YouTubeCommentFetchOptions,
     YouTubeCommentSortOrder,
@@ -52,12 +52,12 @@ from .providers.youtube_provider import (
     YouTubeVideoUnavailableError,
 )
 
-from .providers.fake_youtube_provider import FakeYouTubeProvider
-from .providers.ai_analysis_request import (
+from ..providers.fake_youtube_provider import FakeYouTubeProvider
+from ..providers.ai_analysis_request import (
     AIAnalysisRequest,
     AICommentInput,
 )
-from .providers.selenium_youtube_provider import (
+from ..providers.selenium_youtube_provider import (
     COMMENT_ELEMENT_DATA_SCRIPT,
     VIDEO_COMMENT_THREAD_SELECTOR,
     InvalidYouTubeCommentElementError,
@@ -76,7 +76,7 @@ from .providers.selenium_youtube_provider import (
     select_comment_sort_order,
 )
 
-from .services.youtube_fetch_service import (
+from ..services.youtube_fetch_service import (
     YouTubeCommentVideoMismatchError,
     fetch_and_store_youtube_comments,
 )
@@ -182,7 +182,7 @@ class AnalysisJobProgressServiceTests(SimpleTestCase):
 
 
 """分析總覽頁面的基本測試。"""
-class OverviewViewTests(TestCase): #這是Django 內建的測試指令。它會自動尋找 analyses/tests.py 內符合規則的測試：
+class OverviewViewTests(TestCase):  # Django 會自動尋找 analyses/tests/ 內符合規則的測試。
 
     def test_overview_page_renders_expected_content(self):
         response = self.client.get(reverse("analyses:overview")) #模擬瀏覽器向 Django 發送請求。

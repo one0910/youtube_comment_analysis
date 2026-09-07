@@ -6,8 +6,8 @@ import json
 
 from django.test import SimpleTestCase
 
-from .services.report_v2_artifact_service import load_report_v2_payload
-from .testing.report_v2_factory import build_report_test_fixture
+from ..services.report_v2_artifact_service import load_report_v2_payload
+from .report_v2_factory import build_report_test_fixture
 
 
 class ReportV2ArtifactLoaderTests(SimpleTestCase):

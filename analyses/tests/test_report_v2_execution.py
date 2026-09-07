@@ -3,13 +3,13 @@ from datetime import UTC, datetime
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import AnalysisJob, AnalysisResult, Comment, CommentObservation, FetchRun, Video
-from .providers import ai_report_v2 as v2
-from .services.ai_report_preparation_service import prepare_report_facts
-from .services.analysis_job_creation_service import create_pending_analysis_job_for_video
-from .services.report_v2_artifact_service import load_report_v2_payload
-from .services.report_v2_execution_service import execute_report_v2_analysis
-from .services.report_v2_result_service import ReportV2UnavailableError, load_report_v2_from_result
+from ..models import AnalysisJob, AnalysisResult, Comment, CommentObservation, FetchRun, Video
+from ..providers import ai_report_v2 as v2
+from ..services.ai_report_preparation_service import prepare_report_facts
+from ..services.analysis_job_creation_service import create_pending_analysis_job_for_video
+from ..services.report_v2_artifact_service import load_report_v2_payload
+from ..services.report_v2_execution_service import execute_report_v2_analysis
+from ..services.report_v2_result_service import ReportV2UnavailableError, load_report_v2_from_result
 
 
 class FakeReportV2Provider:
