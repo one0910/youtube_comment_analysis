@@ -4,17 +4,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-
+"""YouTube 留言可使用的排序方式。"""
 class YouTubeCommentSortOrder(StrEnum):
-    """YouTube 留言可使用的排序方式。"""
 
     TOP = "top"
     NEWEST = "newest"
 
 
+"""影片網址驗證成功後，顯示預覽卡片需要的資料。"""
 @dataclass(frozen=True)
 class YouTubeVideoPreviewData:
-    """影片網址驗證成功後，顯示預覽卡片需要的資料。"""
 
     youtube_video_id: str
     video_title: str
@@ -24,10 +23,9 @@ class YouTubeVideoPreviewData:
     video_comment_count: int | None
     video_like_count: int | None = None
 
-
+"""這邊定義當從YouTube取得留言資料的型別。"""
 @dataclass(frozen=True)
 class YouTubeCommentData:
-    """Provider 從 YouTube 取得的一則留言資料。"""
 
     youtube_comment_id: str
     youtube_video_id: str
@@ -47,17 +45,14 @@ class YouTubeCommentData:
 class YouTubeCommentFetchOptions:
     """控制一次 YouTube 留言抓取的共用選項。"""
 
-    sort_order: YouTubeCommentSortOrder = YouTubeCommentSortOrder.NEWEST
-    include_replies: bool = True
-    maximum_comment_count: int | None = None
+    sort_order: YouTubeCommentSortOrder = YouTubeCommentSortOrder.NEWEST #用什麼順序抓留言
+    include_replies: bool = True #是否抓回覆
+    maximum_comment_count: int | None = None #最多抓幾則
 
     def __post_init__(self):
         """留言數量上限有設定時，必須至少為一。"""
 
-        if (
-            self.maximum_comment_count is not None
-            and self.maximum_comment_count < 1
-        ):
+        if (self.maximum_comment_count is not None and self.maximum_comment_count < 1 ):
             raise ValueError("留言抓取數量上限必須至少為 1。")
 
 
@@ -72,10 +67,7 @@ class YouTubeVideoUnavailableError(Exception):
         self.provider_status = provider_status
         self.provider_reason = provider_reason
 
-        error_message = (
-            provider_reason
-            or f"YouTube playability status: {provider_status}"
-        )
+        error_message = (provider_reason or f"YouTube playability status: {provider_status}")
         super().__init__(error_message)
 
 

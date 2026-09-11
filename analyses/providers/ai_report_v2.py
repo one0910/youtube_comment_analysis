@@ -110,9 +110,9 @@ class ReportSampleV2:
         object.__setattr__(self, "analysis_mode", mode)
 
 
+"""固定情緒類別下的估計百分比與解讀，不含留言筆數。"""
 @dataclass(frozen=True, slots=True)
 class SentimentCategoryV2:
-    """固定情緒類別下的估計百分比與解讀，不含留言筆數。"""
 
     percentage: int
     description: str

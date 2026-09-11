@@ -114,11 +114,16 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
 """收到開始分析請求後，建立一個等待處理的任務。"""
 @require_POST
 def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
+    # 去資料庫取剛preview後的相關資料
     video_record = get_object_or_404( Video,id=video_id,)
+    # 然後將透過preview影片來建立一個等待處理的分析任務。
     created_analysis_job = create_pending_analysis_job_for_video(video_record=video_record)
+    # created_analysis_job.fetch_run可以取得AnalysisJob的資料。透過反向關聯，找出剛才建立的第一次 FetchRun
     fetch_run = created_analysis_job.fetch_runs.get(attempt_number=1)
 
     try:
+        #把這筆 FetchRun 的 ID 交给 Celery Worker 處理
+        #delay可以把它理解成「把執行工作延後交給 Worker」，但不是指定延遲幾秒。這是 Celery 的 API 命名，使用時直接把它讀成「派送背景任務」比較不容易混淆。
         execute_youtube_fetch_run_task.delay(fetch_run_id=str(fetch_run.id))
     except Exception:
         logger.exception("無法將分析任務送入 Celery Queue。", extra={"analysis_job_id": str(created_analysis_job.id)})
@@ -126,6 +131,7 @@ def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
         created_analysis_job.error_message = "無法啟動背景分析工作，請確認 Redis 與 Celery Worker 是否正常運作。"
         created_analysis_job.save(update_fields=["status", "error_message", "updated_at"])
 
+    # 轉跳至分析進度頁。例如http://127.0.0.1:8000/analyses/jobs/1a608283-b4a8-47e1-969f-6ead020a8f41/
     return redirect(
         "analyses:analysis_job_detail",
         analysis_job_id=created_analysis_job.id,

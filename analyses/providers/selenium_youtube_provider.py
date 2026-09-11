@@ -209,9 +209,6 @@ def iter_loaded_top_level_comment_data(
     
 
     comment_thread_elements = get_loaded_top_level_comment_thread_elements(chrome_driver=chrome_driver)[start_comment_thread_index:]
-    
-    
-    
     yielded_comment_count = 0
 
     for comment_thread_element in comment_thread_elements:
@@ -421,8 +418,8 @@ def select_comment_sort_order(
     wait.until(EC.invisibility_of_element(target_sort_option))
 
 
+"""讀取 YouTube 播放狀態，確認影片是否可以公開存取。"""
 def check_youtube_video_is_available(chrome_driver: WebDriver, wait: WebDriverWait) -> None:
-    """讀取 YouTube 播放狀態，確認影片是否可以公開存取。"""
 
     video_playability_data = wait.until(
         lambda current_driver: current_driver.execute_script(
@@ -519,8 +516,8 @@ def get_video_comment_count(chrome_driver: WebDriver) -> int | None:
 class SeleniumYouTubeProvider(YouTubeProvider):
     """使用 Selenium 取得 YouTube 影片資料。"""
 
+    """開啟 YouTube 影片頁面並取得預覽資料。"""
     def get_video_preview(self,youtube_video_id: str) -> YouTubeVideoPreviewData:
-        """開啟 YouTube 影片頁面並取得預覽資料。"""
 
         youtube_video_url = ("https://www.youtube.com/watch"f"?v={youtube_video_id}")
         chrome_driver = create_local_chrome_driver(run_in_headless_mode=True)

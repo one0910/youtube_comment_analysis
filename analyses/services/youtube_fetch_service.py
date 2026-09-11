@@ -28,6 +28,7 @@ def fetch_and_store_youtube_comments(
     observed_youtube_comment_ids: set[str] = set()
 
     try:
+        # 呼叫 Provider 的 iter_video_comments()，逐筆取得留言
         comment_data_iterator = youtube_provider.iter_video_comments(
             youtube_video_id=video_record.youtube_video_id,
             fetch_options=fetch_options,

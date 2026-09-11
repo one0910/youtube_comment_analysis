@@ -68,17 +68,17 @@ class Video(models.Model):
 
         return f"{self.video_title} ({self.youtube_video_id})"
 
+#整個分析流程，這份影片分析正在等待 AI，最後是否完成
 class AnalysisJob(models.Model):
-    """保存一個影片留言抓取及 AI 分析任務的執行狀態。"""
 
+    """這次任務使用哪一種 YouTube 資料來源。"""
     class DataSource(models.TextChoices):
-        """這次任務使用哪一種 YouTube 資料來源。"""
 
         SELENIUM = "selenium", gettext_lazy("Selenium")
         YOUTUBE_API = "youtube_api", gettext_lazy("YouTube API")
 
+    #分析任務目前的執行狀態
     class Status(models.TextChoices):
-        """分析任務目前的執行狀態。"""
 
         PENDING = "pending", gettext_lazy("等待處理")
         RUNNING = "running", gettext_lazy("執行中")
@@ -90,7 +90,7 @@ class AnalysisJob(models.Model):
         FAILED = "failed", gettext_lazy("執行失敗")
         CANCELLED = "cancelled", gettext_lazy("已取消")
     
-    """分析任務目前所在的流程階段。"""
+    #分析任務目前所在的流程階段
     class Stage(models.TextChoices):
         VIDEO_CONFIRMATION = "video_confirmation", gettext_lazy("確認影片資料")
         COMMENT_FETCHING = "comment_fetching", gettext_lazy("抓取留言")
@@ -108,7 +108,7 @@ class AnalysisJob(models.Model):
 
     video = models.ForeignKey(
         Video,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="analysis_jobs",
         verbose_name=gettext_lazy("影片"),
     )
@@ -190,7 +190,7 @@ class AnalysisJob(models.Model):
         )
 
 
-"""保存一次 YouTube 留言資料抓取的執行紀錄。"""
+#其中一次抓留言的過程，第一次抓取、包含回覆、目前已抓 30 則。
 class FetchRun(models.Model):
 
     """留言抓取目前的執行狀態。"""
@@ -212,6 +212,7 @@ class FetchRun(models.Model):
         verbose_name=gettext_lazy("抓取紀錄 ID"),
     )
 
+    #這是 Django 的「反向關聯」的寫法，這段告訴 Django每一筆 FetchRun 都屬於一筆 AnalysisJob，也就是可以在fetch_runs裡取得AnalysisJob的資料
     analysis_job = models.ForeignKey(
         AnalysisJob,
         on_delete=models.CASCADE,

@@ -6,6 +6,8 @@ from analyses.providers.youtube_provider import (
 )
 
 
+
+
 """使用 Selenium 取得影片預覽資料。"""
 def get_video_preview_with_selenium(youtube_video_id: str) -> YouTubeVideoPreviewData:
     selenium_youtube_provider = SeleniumYouTubeProvider()

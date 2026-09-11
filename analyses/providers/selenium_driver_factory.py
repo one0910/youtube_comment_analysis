@@ -21,8 +21,6 @@ def create_local_chrome_driver(run_in_headless_mode: bool = True) -> WebDriver:
     chrome_driver = webdriver.Chrome(options=chrome_options)
 
     # 避免網頁長時間沒有載入完成，導致程式永遠卡住。
-    chrome_driver.set_page_load_timeout(
-        DEFAULT_PAGE_LOAD_TIMEOUT_SECONDS
-    )
+    chrome_driver.set_page_load_timeout(DEFAULT_PAGE_LOAD_TIMEOUT_SECONDS)
 
     return chrome_driver

@@ -27,6 +27,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# 本機大量清理測試資料：允許 Admin 提交不限數量的選取 ID。
+# 正式部署時應恢復有限上限，避免過大的表單耗用資源。
+DATA_UPLOAD_MAX_NUMBER_FIELDS = None
+
 
 # Application definition
 

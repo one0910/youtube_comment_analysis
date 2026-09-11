@@ -8,7 +8,9 @@
       {% for comment in evidence %}
         <blockquote class="border-l-4 {% if forloop.first %}border-violet-500{% else %}border-slate-300{% endif %} bg-white p-4">
           <p class="whitespace-pre-wrap break-words text-base leading-7 text-slate-700">{{ comment.comment_text }}</p>
-          <footer class="mt-2 text-sm text-slate-500">{{ comment.author_display_name }} · 讚 {{ comment.like_count|default_if_none:"未知" }}</footer>
+            <footer class="mt-2 text-sm text-slate-500">{{ comment.author_display_name }} · 
+            <span class="text-violet-700">讚{{ comment.like_count|default_if_none:"未知" }}</span>  
+          </footer>
         </blockquote>
       {% endfor %}
     </div>

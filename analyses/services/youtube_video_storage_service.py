@@ -4,8 +4,8 @@ from analyses.providers.youtube_provider import (
 )
 
 
+"""將 YouTube 預覽資料新增或更新到 Video 資料表。"""
 def save_or_update_video_from_preview_data(video_preview_data: YouTubeVideoPreviewData) -> Video:
-    """將 YouTube 預覽資料新增或更新到 Video 資料表。"""
 
     video_record, _ = Video.objects.update_or_create(
         # 使用 YouTube 影片 ID 判斷是不是同一支影片。

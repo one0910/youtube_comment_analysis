@@ -7,7 +7,6 @@ from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase,TestCase #TestCase：每個測試之間隔離資料庫資料。
 from django.urls import reverse #reverse()：透過 URL 名稱取得網址。
 from django.db import IntegrityError, transaction
-from django.db.models.deletion import ProtectedError
 from selenium.common.exceptions import TimeoutException
 
 from ..forms import NewAnalysisForm
@@ -135,11 +134,15 @@ class VideoAndAnalysisJobModelTests(TestCase):
             with transaction.atomic():
                 AnalysisJob.objects.create(video=self.video_record,progress_percentage=101)
 
-    """已有分析任務的影片不可直接刪除。"""
-    def test_video_with_analysis_job_is_protected_from_deletion(self):
-        AnalysisJob.objects.create(video=self.video_record)
-        with self.assertRaises(ProtectedError):
-            self.video_record.delete()
+    """刪除影片時也清除相關分析任務與抓取紀錄。"""
+    def test_video_deletion_cascades_to_analysis_jobs(self):
+        analysis_job = AnalysisJob.objects.create(video=self.video_record)
+        fetch_run = FetchRun.objects.create(analysis_job=analysis_job)
+        video_id = self.video_record.pk
+        self.video_record.delete()
+        self.assertFalse(Video.objects.filter(pk=video_id).exists())
+        self.assertFalse(AnalysisJob.objects.filter(pk=analysis_job.pk).exists())
+        self.assertFalse(FetchRun.objects.filter(pk=fetch_run.pk).exists())
 
     """相同 YouTube 影片 ID 不可建立兩筆 Video。"""
     def test_youtube_video_id_must_be_unique(self):

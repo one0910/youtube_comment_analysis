@@ -31,10 +31,10 @@ class PreparedReportFacts:
         return None if displayed_count is None else displayed_count - self.sample.analyzed_comment_count
 
 
+"""輸入須已去重；遇到無效資料拒絕，不默默刪除留言或修猜數值。"""
 def prepare_report_facts(
     analysis_request: AIAnalysisRequest, video: ReportVideoV2, *, sort_order: str, include_replies: bool,
 ) -> PreparedReportFacts:
-    """輸入須已去重；遇到無效資料拒絕，不默默刪除留言或修猜數值。"""
     if not isinstance(analysis_request, AIAnalysisRequest) or not isinstance(video, ReportVideoV2):
         raise ValueError("必須提供分析 Request 與影片快照。")
     if video.youtube_video_id != analysis_request.youtube_video_id or video.title != analysis_request.video_title:
@@ -200,8 +200,8 @@ def replace_report_comment_refs_with_author_names(
     )
 
 
+"""小型樣本只保留必要的洞察，避免少量留言被過度拆分。"""
 def apply_report_sample_scope(report: AIReportV2) -> AIReportV2:
-    """小型樣本只保留必要的洞察，避免少量留言被過度拆分。"""
     if report.sample.analysis_mode != "small":
         return report
     return replace(

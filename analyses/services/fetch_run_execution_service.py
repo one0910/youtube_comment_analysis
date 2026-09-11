@@ -40,6 +40,7 @@ def execute_youtube_fetch_run(
     fetch_run.save(update_fields=["status", "started_at", "completed_at", "error_code", "error_message", "updated_at"])
 
     try:
+        # 開始的真正抓取留言與儲存的流程
         stored_comment_count = fetch_and_store_youtube_comments(
             fetch_run=fetch_run,
             youtube_provider=youtube_provider,
