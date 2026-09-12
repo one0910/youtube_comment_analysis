@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AnalysisJob, Comment, CommentObservation, FetchRun, Video
+from .models import AnalysisJob, Comment, CommentSnapshot, FetchRun, Video
 
 
 @admin.register(Video)
@@ -164,25 +164,25 @@ class CommentAdmin(admin.ModelAdmin):
         return single_line_comment_text[:80]
 
 
-@admin.register(CommentObservation)
-class CommentObservationAdmin(admin.ModelAdmin):
-    """設定留言觀察紀錄在 Django Admin 裡的顯示方式。"""
+@admin.register(CommentSnapshot)
+class CommentSnapshotAdmin(admin.ModelAdmin):
+    """設定留言快照在 Django Admin 裡的顯示方式。"""
 
     list_display = (
         "id",
         "fetch_run",
         "comment",
-        "observed_author_display_name",
-        "observed_like_count",
-        "observed_is_pinned",
-        "observed_at",
+        "snapshot_author_display_name",
+        "snapshot_like_count",
+        "snapshot_is_pinned",
+        "snapshot_at",
     )
 
     list_filter = (
-        "observed_is_pinned",
+        "snapshot_is_pinned",
         "fetch_run__data_source",
         "fetch_run__status",
-        "observed_at",
+        "snapshot_at",
     )
 
     search_fields = (
@@ -194,7 +194,7 @@ class CommentObservationAdmin(admin.ModelAdmin):
     )
 
     readonly_fields = (
-        "observed_at",
+        "snapshot_at",
     )
 
     list_select_related = (
@@ -203,5 +203,5 @@ class CommentObservationAdmin(admin.ModelAdmin):
     )
 
     ordering = (
-        "-observed_at",
+        "-snapshot_at",
     )
