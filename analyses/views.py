@@ -123,7 +123,12 @@ def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
 
     try:
         #把這筆 FetchRun 的 ID 交给 Celery Worker 處理
-        #delay可以把它理解成「把執行工作延後交給 Worker」，但不是指定延遲幾秒。這是 Celery 的 API 命名，使用時直接把它讀成「派送背景任務」比較不容易混淆。
+        '''
+            delay是Celery 提供的函式,它有2個目的
+                1.把「任務名稱＋參數」送進 Redis,以這裡為例，要送進radis的youtube_selenium Queue
+                2.把執行工作延後並交給 Worker，以這裡為例，execute_youtube_fetch_run_task就會交給Worker來執行
+        '''
+        print(f"""fetch_run.id_1 => {fetch_run.id}""", )
         execute_youtube_fetch_run_task.delay(fetch_run_id=str(fetch_run.id))
     except Exception:
         logger.exception("無法將分析任務送入 Celery Queue。", extra={"analysis_job_id": str(created_analysis_job.id)})

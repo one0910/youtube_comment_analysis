@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from django.test import TestCase
 from django.urls import reverse
 
-from ..models import AnalysisJob, AnalysisResult, Comment, CommentObservation, FetchRun, Video
+from ..models import AnalysisJob, AnalysisResult, Comment, CommentSnapshot, FetchRun, Video
 from ..providers import ai_report_v2 as v2
 from ..services.ai_report_preparation_service import prepare_report_facts
 from ..services.analysis_job_creation_service import create_pending_analysis_job_for_video
@@ -81,12 +81,12 @@ class ReportV2ExecutionServiceTests(TestCase):
             comment_text="這是一則測試留言。",
             like_count=7,
         )
-        CommentObservation.objects.create(
+        CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=comment,
-            observed_author_display_name="@tester",
-            observed_comment_text="這是一則測試留言。",
-            observed_like_count=7,
+            snapshot_author_display_name="@tester",
+            snapshot_comment_text="這是一則測試留言。",
+            snapshot_like_count=7,
         )
         self.fetch_run.status = FetchRun.Status.COMPLETED
         self.fetch_run.fetched_comment_count = 1
@@ -177,7 +177,7 @@ class ReportV2ExecutionServiceTests(TestCase):
         self.assertEqual(provider.calls, [])
 
     def test_completed_fetch_without_comments_marks_job_failed(self):
-        CommentObservation.objects.filter(fetch_run=self.fetch_run).delete()
+        CommentSnapshot.objects.filter(fetch_run=self.fetch_run).delete()
         provider = FakeReportV2Provider()
 
         with self.assertRaisesRegex(ValueError, "找不到"):

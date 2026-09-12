@@ -436,69 +436,69 @@ class Comment(models.Model):
 
 
 """保存某次抓取實際取得的一則留言資料快照。"""
-class CommentObservation(models.Model):
+class CommentSnapshot(models.Model):
 
 
     fetch_run = models.ForeignKey(
         FetchRun,
         on_delete=models.CASCADE,
-        related_name="comment_observations",
+        related_name="comment_snapshots",
         verbose_name=gettext_lazy("留言抓取紀錄"),
     )
 
     comment = models.ForeignKey(
         Comment,
         on_delete=models.CASCADE,
-        related_name="observations",
+        related_name="snapshots",
         verbose_name=gettext_lazy("留言"),
     )
 
-    observed_author_display_name = models.CharField(
+    snapshot_author_display_name = models.CharField(
         max_length=255,
         blank=True,
         verbose_name=gettext_lazy("抓取時的留言作者名稱"),
     )
 
-    observed_comment_text = models.TextField(
+    snapshot_comment_text = models.TextField(
         verbose_name=gettext_lazy("抓取時的留言內容"),
     )
 
-    observed_like_count = models.PositiveBigIntegerField(
+    snapshot_like_count = models.PositiveBigIntegerField(
         null=True,
         blank=True,
         verbose_name=gettext_lazy("抓取時的按讚數"),
     )
 
-    observed_published_time_text = models.CharField(
+    snapshot_published_time_text = models.CharField(
         max_length=255,
         blank=True,
         verbose_name=gettext_lazy("抓取時的顯示時間文字"),
     )
 
-    observed_youtube_updated_at = models.DateTimeField(
+    snapshot_youtube_updated_at = models.DateTimeField(
         null=True,
         blank=True,
         verbose_name=gettext_lazy("抓取時的 YouTube 更新時間"),
     )
 
-    observed_is_pinned = models.BooleanField(
+    snapshot_is_pinned = models.BooleanField(
         default=False,
         verbose_name=gettext_lazy("抓取時是否置頂"),
     )
 
-    observed_at = models.DateTimeField(
+    snapshot_at = models.DateTimeField(
         auto_now_add=True,
-        verbose_name=gettext_lazy("觀察時間"),
+        verbose_name=gettext_lazy("快照時間"),
     )
 
     class Meta:
-        verbose_name = gettext_lazy("留言觀察紀錄")
-        verbose_name_plural = gettext_lazy("留言觀察紀錄")
-        ordering = ["observed_at", "id"]
+        verbose_name = gettext_lazy("留言快照")
+        verbose_name_plural = gettext_lazy("留言快照")
+        ordering = ["snapshot_at", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["fetch_run", "comment"],
-                name="unique_comment_observation_per_fetch_run",
+                name="unique_comment_snapshot_per_fetch_run",
             ),
         ]
 

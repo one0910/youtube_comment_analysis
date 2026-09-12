@@ -1,5 +1,4 @@
 from uuid import UUID
-
 from django.utils import timezone
 
 from analyses.models import AnalysisJob, FetchRun
@@ -89,7 +88,7 @@ def execute_youtube_fetch_run(
 
     return stored_comment_count
 
-"""依 FetchRun ID 選擇 Provider 並執行留言抓取。"""
+"""這裡的作用是整理fetch_options整理好，例如留言區的排序要設置成最新或是熱門、抓取資料是可包含回覆"""
 def execute_youtube_fetch_run_by_id(
     fetch_run_id: UUID | str,
     fetch_options: YouTubeCommentFetchOptions | None = None,

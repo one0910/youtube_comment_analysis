@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from analyses.models import AnalysisJob, Comment, CommentObservation, FetchRun, Video
+from analyses.models import AnalysisJob, Comment, CommentSnapshot, FetchRun, Video
 from analyses.providers.youtube_provider import (
     YouTubeCommentData,
     YouTubeCommentFetchOptions,
@@ -12,49 +12,47 @@ from analyses.providers.youtube_provider import (
 class YouTubeCommentVideoMismatchError(ValueError):
     """留言資料與目前分析影片不一致。"""
 
-
+"""這裡逐筆取得留言並保存至資料庫。"""
 def fetch_and_store_youtube_comments(
     fetch_run: FetchRun,
     youtube_provider: YouTubeProvider,
     fetch_options: YouTubeCommentFetchOptions | None = None,
 ) -> int:
-    """從 Provider 逐筆取得留言並保存至資料庫。"""
+    
 
     if fetch_options is None:
         fetch_options = YouTubeCommentFetchOptions()
 
     analysis_job = fetch_run.analysis_job
     video_record = fetch_run.analysis_job.video
-    observed_youtube_comment_ids: set[str] = set()
+    processed_youtube_comment_ids: set[str] = set()
 
     try:
-        # 呼叫 Provider 的 iter_video_comments()，逐筆取得留言
-        comment_data_iterator = youtube_provider.iter_video_comments(
+        # 呼叫 Provider 的 get_video_comments()，selenium逐筆取得留言資料
+        comment_datas = youtube_provider.get_video_comments(
             youtube_video_id=video_record.youtube_video_id,
             fetch_options=fetch_options,
         )
 
-        for single_comment_data in comment_data_iterator:
-            _validate_comment_video(
-                video_record=video_record,
-                comment_data=single_comment_data,
-            )
+        for single_comment_data in comment_datas:
+            _validate_comment_video(video_record=video_record,comment_data=single_comment_data)
 
             # Selenium 捲動時可能重複讀到同一個 DOM 留言，
             # 同一次抓取只保存第一次出現的資料。
-            if (single_comment_data.youtube_comment_id in observed_youtube_comment_ids):
+            if (single_comment_data.youtube_comment_id in processed_youtube_comment_ids):
                 continue
 
-            _save_comment_and_observation(
+            _save_comment_and_snapshot(
                 video_record=video_record,
                 fetch_run=fetch_run,
                 comment_data=single_comment_data,
             )
 
-            observed_youtube_comment_ids.add(single_comment_data.youtube_comment_id)
+            processed_youtube_comment_ids.add(single_comment_data.youtube_comment_id)
+            
             _save_fetch_progress(
                 fetch_run=fetch_run,
-                fetched_comment_count=len(observed_youtube_comment_ids),
+                fetched_comment_count=len(processed_youtube_comment_ids),
             )
 
 
@@ -65,7 +63,7 @@ def fetch_and_store_youtube_comments(
 
     finally:
         # 即使 Provider 中途失敗，也保留已成功保存的留言數量。
-        fetch_run.fetched_comment_count = len(observed_youtube_comment_ids)
+        fetch_run.fetched_comment_count = len(processed_youtube_comment_ids)
 
         fetch_run.save(
             update_fields=[
@@ -74,16 +72,16 @@ def fetch_and_store_youtube_comments(
             ]
         )
 
-    return len(observed_youtube_comment_ids)
+    return len(processed_youtube_comment_ids)
 
-
+"""讓進度頁能在 Selenium 抓取期間讀到最新留言數。"""
 def _save_fetch_progress(fetch_run: FetchRun, fetched_comment_count: int) -> None:
-    """讓進度頁能在 Selenium 抓取期間讀到最新留言數。"""
+    
     fetch_run.fetched_comment_count = fetched_comment_count
     FetchRun.objects.filter(pk=fetch_run.pk).update(fetched_comment_count=fetched_comment_count)
 
 
-"""確認 Provider 回傳的留言屬於目前分析的影片。"""
+"""確認 Provider 回傳的留言屬於目前分析的影片，也就是防止「把別支影片的留言存進目前影片」。"""
 def _validate_comment_video(video_record: Video,comment_data: YouTubeCommentData) -> None:
 
     if comment_data.youtube_video_id != video_record.youtube_video_id:
@@ -91,7 +89,7 @@ def _validate_comment_video(video_record: Video,comment_data: YouTubeCommentData
 
 
 @transaction.atomic
-def _save_comment_and_observation(
+def _save_comment_and_snapshot(
     video_record: Video,
     fetch_run: FetchRun,
     comment_data: YouTubeCommentData,
@@ -136,16 +134,16 @@ def _save_comment_and_observation(
         },
     )
 
-    CommentObservation.objects.update_or_create(
+    CommentSnapshot.objects.update_or_create(
         fetch_run=fetch_run,
         comment=comment_record,
         defaults={
-            "observed_author_display_name": (comment_data.author_display_name or ""),
-            "observed_comment_text": comment_data.comment_text,
-            "observed_like_count": comment_data.like_count,
-            "observed_published_time_text": (comment_data.published_time_text or ""),
-            "observed_youtube_updated_at": (comment_data.youtube_updated_at),
-            "observed_is_pinned": comment_data.is_pinned,
+            "snapshot_author_display_name": (comment_data.author_display_name or ""),
+            "snapshot_comment_text": comment_data.comment_text,
+            "snapshot_like_count": comment_data.like_count,
+            "snapshot_published_time_text": (comment_data.published_time_text or ""),
+            "snapshot_youtube_updated_at": (comment_data.youtube_updated_at),
+            "snapshot_is_pinned": comment_data.is_pinned,
         },
     )
 

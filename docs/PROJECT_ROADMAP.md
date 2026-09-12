@@ -31,7 +31,7 @@ YouTube 網址
     → 建立 AnalysisJob 與第一筆 FetchRun
     → Celery 派送至 youtube_selenium Queue
     → Selenium 串流抓取主留言與回覆
-    → 儲存 Comment 與 CommentObservation，持續更新抓取數量
+    → 儲存 Comment 與 CommentSnapshot，持續更新抓取數量
     → Celery 派送至 ai_analysis Queue
     → DeepSeek Report V2 分析與嚴格來源驗證
     → 儲存 AnalysisResult
@@ -39,7 +39,7 @@ YouTube 網址
     → 使用者主動進入正式 RWD 報告頁
 ```
 
-目前正式資料模型包含 `Video`、`AnalysisJob`、`FetchRun`、`Comment`、`CommentObservation` 與 `AnalysisResult`。Web Request 不直接執行 Selenium 或 AI；背景工作分別路由至 `youtube_selenium` 與 `ai_analysis` Queue。開發環境暫以同一個 `solo` Celery Worker 消費兩個 Queue，正式部署前再分離 Worker Process／Container。
+目前正式資料模型包含 `Video`、`AnalysisJob`、`FetchRun`、`Comment`、`CommentSnapshot` 與 `AnalysisResult`。Web Request 不直接執行 Selenium 或 AI；背景工作分別路由至 `youtube_selenium` 與 `ai_analysis` Queue。開發環境暫以同一個 `solo` Celery Worker 消費兩個 Queue，正式部署前再分離 Worker Process／Container。
 
 目前瀏覽器流程的實際界線：
 
@@ -121,13 +121,13 @@ YouTube 網址
 - [x] 設計 `Video`、`AnalysisJob`、`FetchRun` 模型。
 - [x] 建立、審查並套用上述模型的 migration。
 - [x] 將 `Video`、`AnalysisJob`、`FetchRun` 加入 Django Admin。
-- [x] 將 `Comment`、`CommentObservation` 加入 Django Admin。
+- [x] 將 `Comment`、`CommentSnapshot` 加入 Django Admin。
 - [x] 建立影片預覽 DTO 與 `YouTubeProvider` 的影片預覽介面。
 - [x] 建立影片儲存 Service，重複檢查同一影片時更新既有 `Video`。
 - [x] 建立具 transaction 保護的任務建立 Service，同時建立 `AnalysisJob` 與第一筆 `FetchRun`。
 - [x] 設計 `Comment` 模型，保存穩定留言 ID、作者、內容及父留言關係。
-- [x] 設計 `CommentObservation`，記錄每次 `FetchRun` 看到的留言狀態。
-- [x] 建立、審查並套用留言與留言觀察紀錄模型的 migration。
+- [x] 設計 `CommentSnapshot`，記錄每次 `FetchRun` 看到的留言狀態。
+- [x] 建立、審查並套用留言與留言快照模型的 migration。
 - [x] 定義 `YouTubeVideoPreviewData`、`YouTubeCommentData`、`YouTubeCommentFetchOptions` DTO。
 - [x] 擴充 `YouTubeProvider` 共用介面，使用 Iterator 支援逐筆留言串流。
 - [x] 建立 Fake Provider，先測試 Service，不連接外部網站。
@@ -152,7 +152,7 @@ YouTube 網址
 - [x] 取得穩定留言 ID，保存父留言與回覆關係。
 - [x] 將留言分批輸出，不等全部抓完才回傳。
 - [x] 處理熱門／最新排序、留言懶載入、回覆展開、多批「顯示更多回覆」及停止條件。
-- [x] 建立留言儲存 Service，保存 `Comment` 與每次抓取的 `CommentObservation`。
+- [x] 建立留言儲存 Service，保存 `Comment` 與每次抓取的 `CommentSnapshot`。
 - [x] 建立 `FetchRun` 執行 Service，保存執行中、完成及失敗狀態。
 - [x] 以真實 YouTube 影片完成 Selenium、回覆關聯、資料庫與生命週期 Smoke Test。
 - [ ] 建立可重現的 Selenium 測試影片清單。

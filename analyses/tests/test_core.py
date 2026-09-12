@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 from selenium.common.exceptions import TimeoutException
 
 from ..forms import NewAnalysisForm
-from ..models import AnalysisJob, AnalysisResult, Comment, CommentObservation, FetchRun, Video
+from ..models import AnalysisJob, AnalysisResult, Comment, CommentSnapshot, FetchRun, Video
 from ..services.youtube_url_parser import (
     InvalidYouTubeUrlError,
     get_video_id_from_youtube_url,
@@ -648,7 +648,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         second_comment_data = YouTubeCommentData(youtube_comment_id="UgzSecond123",youtube_video_id="dQw4w9WgXcQ",comment_text="第二則留言")
         mock_iter_comments.return_value = iter([first_comment_data,duplicated_comment_data,second_comment_data])
 
-        comment_data = list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ",fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2)))
+        comment_data = list(SeleniumYouTubeProvider().get_video_comments(youtube_video_id="dQw4w9WgXcQ",fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2)))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data],["UgzFirst123","UgzSecond123"])
         chrome_driver.quit.assert_called_once()
@@ -666,7 +666,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         second_comment_data = YouTubeCommentData(youtube_comment_id="UgzSecond123", youtube_video_id="dQw4w9WgXcQ", comment_text="第二則主留言")
         mock_iter_comments.return_value = iter([first_comment_data, second_comment_data])
 
-        comment_data = list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2)))
+        comment_data = list(SeleniumYouTubeProvider().get_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2)))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzFirst123", "UgzSecond123"])
         chrome_driver.get.assert_called_once_with("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -688,7 +688,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         comment_data = YouTubeCommentData(youtube_comment_id="UgzParent123", youtube_video_id="dQw4w9WgXcQ", comment_text="主留言")
         mock_iter_comments.return_value = iter([comment_data])
 
-        list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions(include_replies=False, maximum_comment_count=1)))
+        list(SeleniumYouTubeProvider().get_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions(include_replies=False, maximum_comment_count=1)))
 
         mock_iter_comments.assert_called_once_with(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", maximum_comment_count=1, start_comment_thread_index=0, include_replies=False)
         chrome_driver.quit.assert_called_once()
@@ -702,7 +702,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
 
         chrome_driver = mock_create_driver.return_value
 
-        comment_data = list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
+        comment_data = list(SeleniumYouTubeProvider().get_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
 
         self.assertEqual(comment_data, [])
         mock_iter_comments.assert_not_called()
@@ -716,7 +716,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         chrome_driver = mock_create_driver.return_value
 
         with self.assertRaises(RuntimeError):
-            list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
+            list(SeleniumYouTubeProvider().get_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
 
         chrome_driver.quit.assert_called_once()
 
@@ -736,7 +736,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         third_comment_data = YouTubeCommentData(youtube_comment_id="UgzThird123", youtube_video_id="dQw4w9WgXcQ", comment_text="第二批留言")
         mock_iter_comments.side_effect = [iter([first_comment_data]), iter([second_comment_data, third_comment_data])]
 
-        comment_data = list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
+        comment_data = list(SeleniumYouTubeProvider().get_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzFirst123", "UgzSecond123", "UgzThird123"])
         self.assertEqual(mock_iter_comments.call_count, 2)
@@ -757,7 +757,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         first_comment_data = YouTubeCommentData(youtube_comment_id="UgzFirst123", youtube_video_id="dQw4w9WgXcQ", comment_text="唯一成功載入的留言")
         mock_iter_comments.side_effect = [iter([first_comment_data]), iter([]), iter([])]
 
-        comment_data = list(SeleniumYouTubeProvider().iter_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
+        comment_data = list(SeleniumYouTubeProvider().get_video_comments(youtube_video_id="dQw4w9WgXcQ", fetch_options=YouTubeCommentFetchOptions()))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzFirst123"])
         self.assertEqual(mock_load_next_batch.call_count, 3)
@@ -1675,15 +1675,15 @@ class CommentModelTests(TestCase):
         self.assertEqual(Comment.objects.count(), 0)
 
 
-"""測試留言觀察紀錄的資料庫規則。"""
-class CommentObservationModelTests(TestCase):
+"""測試留言快照的資料庫規則。"""
+class CommentSnapshotModelTests(TestCase):
 
     def setUp(self):
         """建立測試需要的影片、任務、抓取紀錄與留言。"""
 
         self.video_record = Video.objects.create(
             youtube_video_id="dQw4w9WgXcQ",
-            video_title="留言觀察紀錄測試影片",
+            video_title="留言快照測試影片",
         )
 
         self.analysis_job = AnalysisJob.objects.create(
@@ -1703,45 +1703,45 @@ class CommentObservationModelTests(TestCase):
             like_count=25,
         )
 
-    def test_comment_observation_can_be_created(self):
+    def test_comment_snapshot_can_be_created(self):
         """抓取紀錄應能保存留言快照並反向查詢。"""
 
-        comment_observation = CommentObservation.objects.create(
+        comment_snapshot = CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.comment_record,
-            observed_author_display_name="抓取時作者名稱",
-            observed_comment_text="抓取時留言內容",
-            observed_like_count=10,
-            observed_published_time_text="2 天前",
-            observed_is_pinned=True,
+            snapshot_author_display_name="抓取時作者名稱",
+            snapshot_comment_text="抓取時留言內容",
+            snapshot_like_count=10,
+            snapshot_published_time_text="2 天前",
+            snapshot_is_pinned=True,
         )
 
-        self.assertEqual(comment_observation.fetch_run, self.fetch_run)
-        self.assertEqual(comment_observation.comment, self.comment_record)
-        self.assertEqual(comment_observation.observed_like_count, 10)
-        self.assertTrue(comment_observation.observed_is_pinned)
-        self.assertIsNotNone(comment_observation.observed_at)
-        self.assertTrue(self.fetch_run.comment_observations.filter(id=comment_observation.id).exists())
-        self.assertTrue(self.comment_record.observations.filter(id=comment_observation.id).exists())
+        self.assertEqual(comment_snapshot.fetch_run, self.fetch_run)
+        self.assertEqual(comment_snapshot.comment, self.comment_record)
+        self.assertEqual(comment_snapshot.snapshot_like_count, 10)
+        self.assertTrue(comment_snapshot.snapshot_is_pinned)
+        self.assertIsNotNone(comment_snapshot.snapshot_at)
+        self.assertTrue(self.fetch_run.comment_snapshots.filter(id=comment_snapshot.id).exists())
+        self.assertTrue(self.comment_record.snapshots.filter(id=comment_snapshot.id).exists())
 
-    def test_same_comment_cannot_be_observed_twice_in_same_fetch_run(self):
+    def test_same_comment_cannot_be_snapshot_twice_in_same_fetch_run(self):
         """同一次抓取不可重複建立同一則留言的觀察紀錄。"""
 
-        CommentObservation.objects.create(
+        CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.comment_record,
-            observed_comment_text="第一次觀察到的內容",
+            snapshot_comment_text="第一次觀察到的內容",
         )
 
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                CommentObservation.objects.create(
+                CommentSnapshot.objects.create(
                     fetch_run=self.fetch_run,
                     comment=self.comment_record,
-                    observed_comment_text="同一次抓取的重複內容",
+                    snapshot_comment_text="同一次抓取的重複內容",
                 )
 
-    def test_same_comment_can_be_observed_in_different_fetch_runs(self):
+    def test_same_comment_can_be_snapshot_in_different_fetch_runs(self):
         """不同抓取紀錄可以保存同一則留言的不同快照。"""
 
         second_fetch_run = FetchRun.objects.create(
@@ -1750,71 +1750,71 @@ class CommentObservationModelTests(TestCase):
             attempt_number=2,
         )
 
-        first_observation = CommentObservation.objects.create(
+        first_snapshot = CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.comment_record,
-            observed_comment_text="第一次抓取的留言內容",
-            observed_like_count=10,
+            snapshot_comment_text="第一次抓取的留言內容",
+            snapshot_like_count=10,
         )
 
-        second_observation = CommentObservation.objects.create(
+        second_snapshot = CommentSnapshot.objects.create(
             fetch_run=second_fetch_run,
             comment=self.comment_record,
-            observed_comment_text="第二次抓取的留言內容",
-            observed_like_count=25,
+            snapshot_comment_text="第二次抓取的留言內容",
+            snapshot_like_count=25,
         )
 
-        self.assertEqual(CommentObservation.objects.count(), 2)
-        self.assertEqual(first_observation.observed_like_count, 10)
-        self.assertEqual(second_observation.observed_like_count, 25)
+        self.assertEqual(CommentSnapshot.objects.count(), 2)
+        self.assertEqual(first_snapshot.snapshot_like_count, 10)
+        self.assertEqual(second_snapshot.snapshot_like_count, 25)
 
-    def test_updating_comment_does_not_change_existing_observation(self):
+    def test_updating_comment_does_not_change_existing_snapshot(self):
         """更新留言目前資料時，不可改變先前保存的抓取快照。"""
 
-        comment_observation = CommentObservation.objects.create(
+        comment_snapshot = CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.comment_record,
-            observed_author_display_name="舊作者名稱",
-            observed_comment_text="舊留言內容",
-            observed_like_count=10,
+            snapshot_author_display_name="舊作者名稱",
+            snapshot_comment_text="舊留言內容",
+            snapshot_like_count=10,
         )
 
         self.comment_record.author_display_name = "新作者名稱"
         self.comment_record.comment_text = "新留言內容"
         self.comment_record.like_count = 25
         self.comment_record.save()
-        comment_observation.refresh_from_db()
+        comment_snapshot.refresh_from_db()
 
-        self.assertEqual(comment_observation.observed_author_display_name, "舊作者名稱")
-        self.assertEqual(comment_observation.observed_comment_text, "舊留言內容")
-        self.assertEqual(comment_observation.observed_like_count, 10)
+        self.assertEqual(comment_snapshot.snapshot_author_display_name, "舊作者名稱")
+        self.assertEqual(comment_snapshot.snapshot_comment_text, "舊留言內容")
+        self.assertEqual(comment_snapshot.snapshot_like_count, 10)
 
-    def test_deleting_fetch_run_also_deletes_observations(self):
+    def test_deleting_fetch_run_also_deletes_snapshots(self):
         """刪除抓取紀錄時，所屬觀察紀錄應一起刪除。"""
 
-        CommentObservation.objects.create(
+        CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.comment_record,
-            observed_comment_text="準備一起刪除的快照",
+            snapshot_comment_text="準備一起刪除的快照",
         )
 
         self.fetch_run.delete()
 
-        self.assertEqual(CommentObservation.objects.count(), 0)
+        self.assertEqual(CommentSnapshot.objects.count(), 0)
         self.assertTrue(Comment.objects.filter(id=self.comment_record.id).exists())
 
-    def test_deleting_comment_also_deletes_observations(self):
+    def test_deleting_comment_also_deletes_snapshots(self):
         """刪除留言時，所屬觀察紀錄應一起刪除。"""
 
-        CommentObservation.objects.create(
+        CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.comment_record,
-            observed_comment_text="準備一起刪除的快照",
+            snapshot_comment_text="準備一起刪除的快照",
         )
 
         self.comment_record.delete()
 
-        self.assertEqual(CommentObservation.objects.count(), 0)
+        self.assertEqual(CommentSnapshot.objects.count(), 0)
         self.assertTrue(FetchRun.objects.filter(id=self.fetch_run.id).exists())
 
 
@@ -1933,7 +1933,7 @@ class FakeYouTubeProviderTests(SimpleTestCase):
         """最新排序應由新到舊回傳留言。"""
 
         comment_data = list(
-            self.fake_provider.iter_video_comments(
+            self.fake_provider.get_video_comments(
                 youtube_video_id=self.youtube_video_id,
                 fetch_options=YouTubeCommentFetchOptions(),
             )
@@ -1945,7 +1945,7 @@ class FakeYouTubeProviderTests(SimpleTestCase):
         """熱門排序應依按讚數由高到低回傳留言。"""
 
         comment_data = list(
-            self.fake_provider.iter_video_comments(
+            self.fake_provider.get_video_comments(
                 youtube_video_id=self.youtube_video_id,
                 fetch_options=YouTubeCommentFetchOptions(sort_order=YouTubeCommentSortOrder.TOP),
             )
@@ -1957,7 +1957,7 @@ class FakeYouTubeProviderTests(SimpleTestCase):
         """關閉回覆選項時，不應回傳具有父留言 ID 的留言。"""
 
         comment_data = list(
-            self.fake_provider.iter_video_comments(
+            self.fake_provider.get_video_comments(
                 youtube_video_id=self.youtube_video_id,
                 fetch_options=YouTubeCommentFetchOptions(include_replies=False),
             )
@@ -1969,7 +1969,7 @@ class FakeYouTubeProviderTests(SimpleTestCase):
         """留言數量上限應限制 Fake Provider 回傳的資料量。"""
 
         comment_data = list(
-            self.fake_provider.iter_video_comments(
+            self.fake_provider.get_video_comments(
                 youtube_video_id=self.youtube_video_id,
                 fetch_options=YouTubeCommentFetchOptions(maximum_comment_count=2),
             )
@@ -2048,7 +2048,7 @@ class YouTubeFetchServiceTests(TestCase):
             ],
         )
 
-    def test_fetch_stores_comments_observations_and_parent_relationship(self):
+    def test_fetch_stores_comments_snapshots_and_parent_relationship(self):
         """Service 應保存留言、快照並補上父留言關聯。"""
 
         fetched_comment_count = fetch_and_store_youtube_comments(
@@ -2065,13 +2065,13 @@ class YouTubeFetchServiceTests(TestCase):
         self.assertEqual(self.fetch_run.fetched_comment_count, 3)
         self.assertEqual(self.analysis_job.current_stage, AnalysisJob.Stage.COMMENT_NORMALIZATION)
         self.assertEqual(Comment.objects.count(), 3)
-        self.assertEqual(CommentObservation.objects.count(), 3)
+        self.assertEqual(CommentSnapshot.objects.count(), 3)
         self.assertEqual(reply_comment.parent_youtube_comment_id, "UgzParent123")
         self.assertEqual(reply_comment.parent_comment, parent_comment)
 
     def test_fetch_progress_is_saved_after_each_unique_comment(self):
         """Selenium 尚未抓完時，其他請求也應能讀到逐步增加的留言數。"""
-        observed_progress = []
+        snapshot_progress = []
         progress_provider = MagicMock(spec=YouTubeProvider)
 
         def comment_iterator():
@@ -2082,13 +2082,13 @@ class YouTubeFetchServiceTests(TestCase):
             ):
                 yield comment_data
                 self.fetch_run.refresh_from_db()
-                observed_progress.append(self.fetch_run.fetched_comment_count)
+                snapshot_progress.append(self.fetch_run.fetched_comment_count)
 
-        progress_provider.iter_video_comments.return_value = comment_iterator()
+        progress_provider.get_video_comments.return_value = comment_iterator()
 
         fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=progress_provider)
 
-        self.assertEqual(observed_progress, [1, 2, 3])
+        self.assertEqual(snapshot_progress, [1, 2, 3])
 
     def test_unresolved_parent_youtube_id_is_preserved(self):
         """只抓到回覆但尚未抓到父留言時，應保存原始父留言 ID。"""
@@ -2115,10 +2115,10 @@ class YouTubeFetchServiceTests(TestCase):
         self.fetch_run.refresh_from_db()
 
         self.assertEqual(Comment.objects.count(), 3)
-        self.assertEqual(CommentObservation.objects.count(), 3)
+        self.assertEqual(CommentSnapshot.objects.count(), 3)
         self.assertEqual(self.fetch_run.fetched_comment_count, 3)
 
-    def test_new_fetch_run_updates_comment_and_keeps_old_observation(self):
+    def test_new_fetch_run_updates_comment_and_keeps_old_snapshot(self):
         """新的抓取應更新留言目前資料，但保留舊快照。"""
 
         fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=self.fake_provider)
@@ -2146,15 +2146,15 @@ class YouTubeFetchServiceTests(TestCase):
         fetch_and_store_youtube_comments(fetch_run=second_fetch_run, youtube_provider=updated_fake_provider)
 
         updated_comment = Comment.objects.get(youtube_comment_id="UgzNewest123")
-        first_observation = CommentObservation.objects.get(fetch_run=self.fetch_run, comment=updated_comment)
-        second_observation = CommentObservation.objects.get(fetch_run=second_fetch_run, comment=updated_comment)
+        first_snapshot = CommentSnapshot.objects.get(fetch_run=self.fetch_run, comment=updated_comment)
+        second_snapshot = CommentSnapshot.objects.get(fetch_run=second_fetch_run, comment=updated_comment)
 
         self.assertEqual(updated_comment.comment_text, "更新後的留言內容")
         self.assertEqual(updated_comment.like_count, 99)
-        self.assertEqual(first_observation.observed_comment_text, "最新留言")
-        self.assertEqual(first_observation.observed_like_count, 10)
-        self.assertEqual(second_observation.observed_comment_text, "更新後的留言內容")
-        self.assertEqual(second_observation.observed_like_count, 99)
+        self.assertEqual(first_snapshot.snapshot_comment_text, "最新留言")
+        self.assertEqual(first_snapshot.snapshot_like_count, 10)
+        self.assertEqual(second_snapshot.snapshot_comment_text, "更新後的留言內容")
+        self.assertEqual(second_snapshot.snapshot_like_count, 99)
 
     def test_provider_failure_keeps_successfully_stored_comments(self):
         """Provider 中途失敗時，已成功保存的留言與數量應保留。"""
@@ -2165,7 +2165,7 @@ class YouTubeFetchServiceTests(TestCase):
             yield self.newest_comment_data
             raise RuntimeError("模擬 Provider 中途失敗")
 
-        failing_provider.iter_video_comments.return_value = failing_comment_iterator()
+        failing_provider.get_video_comments.return_value = failing_comment_iterator()
 
         with self.assertRaises(RuntimeError):
             fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=failing_provider)
@@ -2173,7 +2173,7 @@ class YouTubeFetchServiceTests(TestCase):
         self.fetch_run.refresh_from_db()
 
         self.assertEqual(Comment.objects.count(), 1)
-        self.assertEqual(CommentObservation.objects.count(), 1)
+        self.assertEqual(CommentSnapshot.objects.count(), 1)
         self.assertEqual(self.fetch_run.fetched_comment_count, 1)
 
     def test_existing_comment_from_another_video_is_rejected(self):
@@ -2196,7 +2196,7 @@ class YouTubeFetchServiceTests(TestCase):
         self.fetch_run.refresh_from_db()
 
         self.assertEqual(self.fetch_run.fetched_comment_count, 0)
-        self.assertEqual(CommentObservation.objects.count(), 0)
+        self.assertEqual(CommentSnapshot.objects.count(), 0)
         self.assertEqual(Comment.objects.get(youtube_comment_id="UgzNewest123").video, other_video_record)
 
 
@@ -2378,26 +2378,26 @@ class AIAnalysisRequestServiceTests(TestCase):
             comment_text="目前回覆內容",
             like_count=20,
         )
-        CommentObservation.objects.create(
+        CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.parent_comment,
-            observed_author_display_name="抓取時主留言作者",
-            observed_comment_text="抓取時主留言內容",
-            observed_like_count=80,
-            observed_published_time_text="2 天前",
-            observed_is_pinned=True,
+            snapshot_author_display_name="抓取時主留言作者",
+            snapshot_comment_text="抓取時主留言內容",
+            snapshot_like_count=80,
+            snapshot_published_time_text="2 天前",
+            snapshot_is_pinned=True,
         )
-        CommentObservation.objects.create(
+        CommentSnapshot.objects.create(
             fetch_run=self.fetch_run,
             comment=self.reply_comment,
-            observed_author_display_name="抓取時回覆作者",
-            observed_comment_text="抓取時回覆內容",
-            observed_like_count=10,
-            observed_published_time_text="1 天前",
-            observed_is_pinned=False,
+            snapshot_author_display_name="抓取時回覆作者",
+            snapshot_comment_text="抓取時回覆內容",
+            snapshot_like_count=10,
+            snapshot_published_time_text="1 天前",
+            snapshot_is_pinned=False,
         )
 
-    def test_builds_request_from_observation_snapshot_values(self):
+    def test_builds_request_from_snapshot_snapshot_values(self):
         analysis_request = build_ai_analysis_request_from_fetch_run(
             fetch_run=self.fetch_run,
         )
@@ -2414,7 +2414,7 @@ class AIAnalysisRequestServiceTests(TestCase):
         self.assertTrue(analysis_request.comments[0].is_pinned)
         self.assertEqual(analysis_request.comments[1].parent_youtube_comment_id, "UgzParent123")
 
-    def test_only_uses_observations_from_selected_fetch_run(self):
+    def test_only_uses_snapshots_from_selected_fetch_run(self):
         second_fetch_run = FetchRun.objects.create(
             analysis_job=self.analysis_job,
             data_source=AnalysisJob.DataSource.SELENIUM,
@@ -2422,12 +2422,12 @@ class AIAnalysisRequestServiceTests(TestCase):
             attempt_number=2,
             fetched_comment_count=1,
         )
-        CommentObservation.objects.create(
+        CommentSnapshot.objects.create(
             fetch_run=second_fetch_run,
             comment=self.parent_comment,
-            observed_author_display_name="第二次抓取作者",
-            observed_comment_text="第二次抓取內容",
-            observed_like_count=120,
+            snapshot_author_display_name="第二次抓取作者",
+            snapshot_comment_text="第二次抓取內容",
+            snapshot_like_count=120,
         )
 
         analysis_request = build_ai_analysis_request_from_fetch_run(
@@ -2450,7 +2450,7 @@ class AIAnalysisRequestServiceTests(TestCase):
                 fetch_run=self.fetch_run,
             )
 
-    def test_completed_fetch_run_without_observations_is_rejected(self):
+    def test_completed_fetch_run_without_snapshots_is_rejected(self):
         empty_fetch_run = FetchRun.objects.create(
             analysis_job=self.analysis_job,
             data_source=AnalysisJob.DataSource.SELENIUM,

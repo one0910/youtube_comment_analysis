@@ -31,7 +31,7 @@ class FakeYouTubeProvider(YouTubeProvider):
 
         return self._video_preview_data
 
-    def iter_video_comments(
+    def get_video_comments(
         self,
         youtube_video_id: str,
         fetch_options: YouTubeCommentFetchOptions,

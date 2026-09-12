@@ -1,3 +1,4 @@
+from rich import print as rprint
 from collections.abc import Iterator
 from time import sleep
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -569,7 +570,7 @@ class SeleniumYouTubeProvider(YouTubeProvider):
 
 
     """開啟 YouTube 影片並逐筆輸出目前已載入的主留言。"""
-    def iter_video_comments(
+    def get_video_comments(
         self,
         youtube_video_id: str,
         fetch_options: YouTubeCommentFetchOptions,
@@ -600,12 +601,11 @@ class SeleniumYouTubeProvider(YouTubeProvider):
 
             while yielded_comment_count < target_comment_count:
                 loaded_comment_thread_count = len(
-                    get_loaded_top_level_comment_thread_elements(
-                        chrome_driver=chrome_driver,
-                    )
+                    get_loaded_top_level_comment_thread_elements(chrome_driver=chrome_driver)
                 )
                 remaining_comment_count = target_comment_count - yielded_comment_count
 
+                # 透過iter_loaded_top_level_comment_data遍歷主留言及回覆
                 for comment_data in iter_loaded_top_level_comment_data(
                     chrome_driver=chrome_driver,
                     youtube_video_id=youtube_video_id,
@@ -617,7 +617,6 @@ class SeleniumYouTubeProvider(YouTubeProvider):
                         continue
 
                     seen_youtube_comment_ids.add(comment_data.youtube_comment_id)
-
                     yield comment_data
                     yielded_comment_count += 1
 

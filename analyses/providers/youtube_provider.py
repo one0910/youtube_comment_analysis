@@ -71,8 +71,8 @@ class YouTubeVideoUnavailableError(Exception):
         super().__init__(error_message)
 
 
+"""所有 YouTube 資料來源都必須遵守的共同介面。"""
 class YouTubeProvider(ABC):
-    """所有 YouTube 資料來源都必須遵守的共同介面。"""
 
     @abstractmethod
     def get_video_preview(self, youtube_video_id: str) -> YouTubeVideoPreviewData:
@@ -81,11 +81,10 @@ class YouTubeProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def iter_video_comments(
+    def get_video_comments(
         self,
         youtube_video_id: str,
         fetch_options: YouTubeCommentFetchOptions,
-        video_like_count: int | None = None
     ) -> Iterator[YouTubeCommentData]:
         """逐筆回傳指定影片的 YouTube 留言資料。"""
 
