@@ -1,4 +1,4 @@
-"""正式影片分析報告使用的 V2 資料契約。"""
+"""正式影片分析報告使用的資料契約。"""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -6,7 +6,7 @@ from datetime import datetime
 from .ai_analysis_request import AIAnalysisMode
 
 
-REPORT_SCHEMA_VERSION = "comment-analysis-result-v2"
+REPORT_SCHEMA_VERSION = "comment-analysis-result"
 SENTIMENT_METHOD = "ai_batch_estimate"
 SENTIMENT_NOTICE = "AI 估計，非逐則分類統計；不代表整體民意。"
 IDENTITY_NOTICE = "顯示名稱不等於唯一帳號，重複內容與活躍發言不能證明操作意圖。"
@@ -58,7 +58,7 @@ def _timestamp(value: str | None, label: str) -> None:
 
 """抓取時的影片快照；未知數值用 None，不能以 0 代替。"""
 @dataclass(frozen=True, slots=True)
-class ReportVideoV2:
+class ReportVideo:
 
     youtube_video_id: str
     title: str
@@ -85,21 +85,21 @@ class ReportVideoV2:
 
 """有效、去重且實際送入 AI 的樣本；不宣稱已取得所有公開留言。"""
 @dataclass(frozen=True, slots=True)
-class ReportSampleV2:
+class ReportSample:
 
     analyzed_comment_count: int
-    top_level_comment_count: int
+    main_comment_count: int
     reply_comment_count: int
     sort_order: str
     include_replies: bool
     analysis_mode: AIAnalysisMode = field(init=False)
 
     def __post_init__(self):
-        for name in ("analyzed_comment_count", "top_level_comment_count", "reply_comment_count"):
+        for name in ("analyzed_comment_count", "main_comment_count", "reply_comment_count"):
             _count(getattr(self, name), name)
         if self.analyzed_comment_count < 1:
             raise ValueError("沒有有效留言時不建立 AI 報告。")
-        if self.top_level_comment_count + self.reply_comment_count != self.analyzed_comment_count:
+        if self.main_comment_count + self.reply_comment_count != self.analyzed_comment_count:
             raise ValueError("主留言數與回覆數總和必須等於分析留言數。")
         if self.sort_order not in ("newest", "top") or type(self.include_replies) is not bool:
             raise ValueError("抓取設定不正確。")
@@ -112,7 +112,7 @@ class ReportSampleV2:
 
 """固定情緒類別下的估計百分比與解讀，不含留言筆數。"""
 @dataclass(frozen=True, slots=True)
-class SentimentCategoryV2:
+class SentimentCategory:
 
     percentage: int
     description: str
@@ -125,25 +125,25 @@ class SentimentCategoryV2:
 
 
 @dataclass(frozen=True, slots=True)
-class SentimentEstimateV2:
+class SentimentEstimate:
     """30 則以上才可使用；總和 100 只表示比例一致，不代表精確測量。"""
 
-    positive: SentimentCategoryV2
-    neutral: SentimentCategoryV2
-    negative: SentimentCategoryV2
+    positive: SentimentCategory
+    neutral: SentimentCategory
+    negative: SentimentCategory
     method: str = field(default=SENTIMENT_METHOD, init=False)
     notice: str = field(default=SENTIMENT_NOTICE, init=False)
 
     def __post_init__(self):
         categories = (self.positive, self.neutral, self.negative)
-        if any(not isinstance(category, SentimentCategoryV2) for category in categories):
+        if any(not isinstance(category, SentimentCategory) for category in categories):
             raise ValueError("情緒類別格式不正確。")
         if sum(category.percentage for category in categories) != 100:
             raise ValueError("情緒估計百分比總和必須等於 100。")
 
 
 @dataclass(frozen=True, slots=True)
-class ReportTopicV2:
+class ReportTopic:
     name: str
     summary: str
     reasoning: str
@@ -156,7 +156,7 @@ class ReportTopicV2:
 
 
 @dataclass(frozen=True, slots=True)
-class ReportInsightV2:
+class ReportInsight:
     """總結或行為解讀；新版 DeepSeek 輸出的每項解讀都必須有留言引用。"""
 
     title: str
@@ -170,7 +170,7 @@ class ReportInsightV2:
 
 
 @dataclass(frozen=True, slots=True)
-class TopLikedCommentV2:
+class TopLikedComment:
     """原文等事實由程式回填；AI 只提供 interpretation。未知讚數不列入 Top 5。"""
 
     youtube_comment_id: str
@@ -186,7 +186,7 @@ class TopLikedCommentV2:
 
 
 @dataclass(frozen=True, slots=True)
-class RepeatedTextGroupV2:
+class RepeatedTextGroup:
     """相同正規化文字，可跨顯示名稱；次數由唯一留言 ID 計算。"""
 
     normalized_text: str
@@ -204,7 +204,7 @@ class RepeatedTextGroupV2:
 
 
 @dataclass(frozen=True, slots=True)
-class DisplayNameActivityV2:
+class DisplayNameActivity:
     """同顯示名稱在同一討論串的多則發言；不等同同一真人或短時間洗版。"""
 
     author_display_name: str
@@ -222,7 +222,7 @@ class DisplayNameActivityV2:
 
 
 @dataclass(frozen=True, slots=True)
-class ReportProvenanceV2:
+class ReportProvenance:
     provider_name: str
     model_name: str
     prompt_version: str
@@ -243,29 +243,29 @@ class ReportProvenanceV2:
                 _count(getattr(self, name), name)
 
 
+# DeepSeek Provider 會整理輸入、呼叫 API、解析回應，並將 AI 的文字分析與 Python 計算的資料組裝成 AIReport。
 @dataclass(frozen=True, slots=True)
-class AIReportV2:
-    """程式與 AI 資料組裝後的報告，不是要求模型原樣產生的 API 回應。"""
+class AIReport:
 
-    video: ReportVideoV2
-    sample: ReportSampleV2
-    provenance: ReportProvenanceV2
+    video: ReportVideo
+    sample: ReportSample
+    provenance: ReportProvenance
     overall_summary: str
     atmosphere: str
-    sentiment: SentimentEstimateV2 | None
-    topics: tuple[ReportTopicV2, ...]
-    top_liked_comments: tuple[TopLikedCommentV2, ...]
-    conclusions: tuple[ReportInsightV2, ...]
+    sentiment: SentimentEstimate | None
+    topics: tuple[ReportTopic, ...]
+    top_liked_comments: tuple[TopLikedComment, ...]
+    conclusions: tuple[ReportInsight, ...]
     limitations: tuple[str, ...]
-    repeated_text_groups: tuple[RepeatedTextGroupV2, ...] = ()
-    display_name_activity: tuple[DisplayNameActivityV2, ...] = ()
-    behavior_insights: tuple[ReportInsightV2, ...] = ()
+    repeated_text_groups: tuple[RepeatedTextGroup, ...] = ()
+    display_name_activity: tuple[DisplayNameActivity, ...] = ()
+    behavior_insights: tuple[ReportInsight, ...] = ()
     schema_version: str = field(default=REPORT_SCHEMA_VERSION, init=False)
     identity_notice: str = field(default=IDENTITY_NOTICE, init=False)
 
     def __post_init__(self):
-        for name, expected_type in (("video", ReportVideoV2), ("sample", ReportSampleV2),
-                                    ("provenance", ReportProvenanceV2)):
+        for name, expected_type in (("video", ReportVideo), ("sample", ReportSample),
+                                    ("provenance", ReportProvenance)):
             if not isinstance(getattr(self, name), expected_type):
                 raise ValueError(f"{name}格式不正確。")
         _text(self.overall_summary, "整體摘要")
@@ -273,12 +273,12 @@ class AIReportV2:
         if self.sample.analysis_mode == AIAnalysisMode.SMALL:
             if self.sentiment is not None:
                 raise ValueError("少於 30 則時只提供文字摘要，不提供情緒比例。")
-        elif not isinstance(self.sentiment, SentimentEstimateV2):
+        elif not isinstance(self.sentiment, SentimentEstimate):
             raise ValueError("30 則以上須提供情緒估計。")
-        for name, item_type in (("topics", ReportTopicV2), ("top_liked_comments", TopLikedCommentV2),
-                                 ("repeated_text_groups", RepeatedTextGroupV2),
-                                 ("display_name_activity", DisplayNameActivityV2),
-                                 ("conclusions", ReportInsightV2), ("behavior_insights", ReportInsightV2)):
+        for name, item_type in (("topics", ReportTopic), ("top_liked_comments", TopLikedComment),
+                                 ("repeated_text_groups", RepeatedTextGroup),
+                                 ("display_name_activity", DisplayNameActivity),
+                                 ("conclusions", ReportInsight), ("behavior_insights", ReportInsight)):
             _items(self, name, item_type, required=name in ("topics", "conclusions"))
         for limitation in _items(self, "limitations", str, required=True):
             _text(limitation, "分析限制")

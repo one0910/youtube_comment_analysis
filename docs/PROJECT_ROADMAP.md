@@ -33,7 +33,7 @@ YouTube 網址
     → Selenium 串流抓取主留言與回覆
     → 儲存 Comment 與 CommentSnapshot，持續更新抓取數量
     → Celery 派送至 ai_analysis Queue
-    → DeepSeek Report V2 分析與嚴格來源驗證
+    → DeepSeek Report  分析與嚴格來源驗證
     → 儲存 AnalysisResult
     → 分析進度頁停止 HTMX polling 並顯示「查看分析報告」
     → 使用者主動進入正式 RWD 報告頁
@@ -186,7 +186,7 @@ YouTube 網址
 ```text
 1. POST 建立 AnalysisJob 與第一筆 FetchRun
 2. 派送 Selenium 留言抓取工作並逐批保存資料及數量
-3. 抓取完成後派送 DeepSeek Report V2 分析工作
+3. 抓取完成後派送 DeepSeek Report  分析工作
 4. 將任務狀態、目前階段、抓取數量與失敗原因反映到進度頁
 5. AI 結果通過 Schema 與來源驗證後保存 AnalysisResult
 6. 任務完成後由使用者點擊按鈕進入正式報告頁
@@ -233,7 +233,7 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 
 - [x] 選定 DeepSeek 與目前使用模型，API Key 僅由環境變數取得。
 - [ ] 定義正式費用預算、單次輸入上限與大量留言批次策略。
-- [x] 定義 Report V2 Provider 介面與嚴格結構化輸出 Schema。
+- [x] 定義 Report  Provider 介面與嚴格結構化輸出 Schema。
 - [x] 設計 `AnalysisResult` 模型並建立、審查及套用 migration。
 - [x] 對全量留言建立正規化輸入、Python 精確統計、短引用與 Top 5 排名。
 - [ ] 實作大量留言分批、Token 預估與分批摘要合併。

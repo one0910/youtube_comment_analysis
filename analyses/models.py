@@ -572,7 +572,7 @@ class AnalysisResult(models.Model):
         verbose_name=gettext_lazy("分析留言數"),
     )
 
-    top_level_comment_count = models.PositiveIntegerField(
+    main_comment_count = models.PositiveIntegerField(
         default=0,
         verbose_name=gettext_lazy("主留言數"),
     )
@@ -630,7 +630,7 @@ class AnalysisResult(models.Model):
             ),
             models.CheckConstraint(
                 condition=models.Q(
-                    analyzed_comment_count=(models.F("top_level_comment_count") + models.F("reply_comment_count")                    ),
+                    analyzed_comment_count=(models.F("main_comment_count") + models.F("reply_comment_count")                    ),
                 ),
                 name="analysis_result_comment_counts_match",
             ),

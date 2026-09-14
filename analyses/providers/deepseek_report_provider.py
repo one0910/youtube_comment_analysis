@@ -1,4 +1,4 @@
-"""正式 V2 報告使用的 DeepSeek Provider。"""
+"""正式 報告使用的 DeepSeek Provider。"""
 
 import json
 import os
@@ -7,12 +7,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .ai_analysis_request import AIAnalysisRequest
-from .ai_report_v2 import (
-    AIReportV2, ReportInsightV2, ReportProvenanceV2, ReportTopicV2, ReportVideoV2,
-    SentimentCategoryV2, SentimentEstimateV2, TopLikedCommentV2,
+from .ai_report import (
+    AIReport, ReportInsight, ReportProvenance, ReportTopic, ReportVideo,
+    SentimentCategory, SentimentEstimate, TopLikedComment,
 )
 from analyses.services.ai_report_preparation_service import (
-    PreparedReportFacts, apply_report_sample_scope, prepare_report_facts,
+    PreparedReportFacts, apply_report_sample_scope, create_validation_criteria,
     replace_report_comment_refs_with_author_names,
     validate_report_source_facts,
 )
@@ -31,7 +31,7 @@ class DeepSeekResponseError(ValueError):
     """DeepSeek 回傳內容無法解析或不符合 Schema。"""
 
 
-SYSTEM_PROMPT_V2 = """
+SYSTEM_PROMPT = """
 你是一位分析 YouTube 留言的輿情資料分析師。以繁體中文撰寫有脈絡、有引用的報告。
 
 【輸入與安全】
@@ -162,18 +162,20 @@ def _reject_constant(value):
     raise ValueError("JSON 不接受 NaN 或 Infinity。")
 
 
-def parse_report_response(content: str, facts: PreparedReportFacts, provenance: ReportProvenanceV2) -> AIReportV2:
-    """嚴格解析 AI 解讀，再由來源補回事實；失敗不傳出含原始留言的錯誤內容。"""
+"""嚴格解析 AI 解讀，再由來源補回事實；失敗不傳出含原始留言的錯誤內容。"""
+def parse_report_response(content: str, facts: PreparedReportFacts, provenance: ReportProvenance) -> AIReport:
     try:
         if not isinstance(content, str) or not content.strip():
             raise ValueError("回應必須是非空字串。")
+        
         payload = json.loads(content, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
         return _assemble_report(payload, facts, provenance)
+
     except (ValueError, TypeError, KeyError, RecursionError) as error:
         raise DeepSeekResponseError("DeepSeek 新版回應不符合報告格式或來源資料，未建立報告。") from error
 
 
-def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: ReportProvenanceV2) -> AIReportV2:
+def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: ReportProvenance) -> AIReport:
     _object(payload, {"overall_summary", "atmosphere", "sentiment", "topics", "top_liked_comments",
                       "behavior_insights", "conclusions"})
     reference_map = {f"c{i}": c for i, c in enumerate(facts.request.comments, 1)}
@@ -195,13 +197,13 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
         parsed_categories = {}
         for key, category in categories.items():
             _object(category, {"percentage", "description"})
-            parsed_categories[key] = SentimentCategoryV2(**category)
-        sentiment = SentimentEstimateV2(**parsed_categories)
+            parsed_categories[key] = SentimentCategory(**category)
+        sentiment = SentimentEstimate(**parsed_categories)
 
     topics = []
     for topic in _list(payload["topics"]):
         _object(topic, {"name", "summary", "reasoning", "evidence_comment_refs"})
-        topics.append(ReportTopicV2(topic["name"], topic["summary"], topic["reasoning"],
+        topics.append(ReportTopic(topic["name"], topic["summary"], topic["reasoning"],
                                     resolve_refs(topic["evidence_comment_refs"])))
 
     interpretations = {}
@@ -214,7 +216,7 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
     if set(interpretations) != {c.youtube_comment_id for c in facts.top_liked_comments}:
         raise ValueError("高讚解讀必須對應 Python 選定的全部 Top 5。")
     top_liked = tuple(
-        TopLikedCommentV2(c.youtube_comment_id, c.author_display_name, c.comment_text, c.like_count,
+        TopLikedComment(c.youtube_comment_id, c.author_display_name, c.comment_text, c.like_count,
                          interpretations[c.youtube_comment_id]) for c in facts.top_liked_comments
     )
 
@@ -228,32 +230,37 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
             if (section == "behavior_insights" and facts.sample.analysis_mode != "small"
                     and not set(ids).issubset(behavior_ids)):
                 raise ValueError("行為解讀必須引用 Python 統計群組內的留言。")
-            items.append(ReportInsightV2(item["title"], item["description"], ids))
+            items.append(ReportInsight(item["title"], item["description"], ids))
         sections[section] = tuple(items)
 
     limitations = ["本次分析僅涵蓋送入的留言樣本，不代表整個留言區或整體民意。"]
     if facts.sample.analysis_mode != "small":
         limitations.append("情緒比例為整批 AI 估計，非逐則分類統計，不換算成留言筆數。")
+
     if facts.unresolved_thread_comment_ids:
         limitations.append(f"有 {len(facts.unresolved_thread_comment_ids)} 則留言無法確認根討論串，未納入討論串活躍統計。")
+        
     difference = facts.displayed_comment_count_difference
+    
     if difference is not None and difference != 0:
         limitations.append(f"YouTube 顯示數減去本次分析數為 {difference}；差異不一定等同漏抓數。")
-    report = AIReportV2(
+
+    report = AIReport(
         video=facts.video, sample=facts.sample, provenance=provenance,
         overall_summary=payload["overall_summary"], atmosphere=payload["atmosphere"], sentiment=sentiment,
         topics=tuple(topics), top_liked_comments=top_liked, repeated_text_groups=facts.repeated_text_groups,
         display_name_activity=facts.display_name_activity, limitations=tuple(dict.fromkeys(limitations)),
         **sections,
     )
+    
     report = replace_report_comment_refs_with_author_names(report, facts)
     report = apply_report_sample_scope(report)
     validate_report_source_facts(report, facts)
     return report
 
 
-class DeepSeekReportV2Provider:
-    """回傳經來源事實驗證的 AIReportV2。"""
+class DeepSeekReportProvider:
+    """回傳經來源事實驗證的 AIReport。"""
 
     def __init__(self, client: Any | None = None, model_name: str = DEEPSEEK_DEFAULT_MODEL):
         self._model_name = model_name
@@ -270,29 +277,44 @@ class DeepSeekReportV2Provider:
         self._client = OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL, timeout=120, max_retries=0)
 
     def analyze_report(
-        self, analysis_request: AIAnalysisRequest, video: ReportVideoV2, *, sort_order: str,
+        self, analysis_request: AIAnalysisRequest, video: ReportVideo, *, sort_order: str,
         include_replies: bool, source_label: str | None = None,
-    ) -> AIReportV2:
-        facts = prepare_report_facts(analysis_request, video, sort_order=sort_order, include_replies=include_replies)
+    ) -> AIReport:
+    
+        validation_criteria = create_validation_criteria(
+            analysis_request, 
+            video, 
+            sort_order=sort_order, 
+            include_replies=include_replies
+          )
+
         if source_label is not None and (not isinstance(source_label, str) or not source_label.strip()):
             raise ValueError("來源標籤必須是非空文字或 None。")
         response = self._client.chat.completions.create(
-            model=self._model_name, messages=[{"role": "system", "content": SYSTEM_PROMPT_V2},
-                                             {"role": "user", "content": build_report_user_message(facts)}],
-            stream=False, response_format={"type": "json_object"}, max_tokens=12000,
+            model=self._model_name,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": build_report_user_message(validation_criteria)}
+            ],
+            stream=False,
+            response_format={"type": "json_object"},
+            max_tokens=12000,
             extra_body={"thinking": {"type": "disabled"}},
         )
+        
         try:
             choice = response.choices[0]
             if choice.finish_reason != "stop" or getattr(choice.message, "refusal", None):
                 raise ValueError("模型回應未正常完成。")
             usage = getattr(response, "usage", None)
-            provenance = ReportProvenanceV2(
+            provenance = ReportProvenance(
                 provider_name="deepseek", model_name=getattr(response, "model", None) or self._model_name,
                 prompt_version=REPORT_PROMPT_VERSION, generated_at=datetime.now(UTC).isoformat(),
                 source_label=source_label, prompt_tokens=getattr(usage, "prompt_tokens", None),
                 completion_tokens=getattr(usage, "completion_tokens", None), total_tokens=getattr(usage, "total_tokens", None),
             )
-            return parse_report_response(choice.message.content, facts, provenance)
+
+            return parse_report_response(choice.message.content, validation_criteria, provenance)
+
         except (AttributeError, IndexError, TypeError, ValueError) as error:
             raise DeepSeekResponseError("DeepSeek 新版回應無效或未完整完成，未建立報告。") from error

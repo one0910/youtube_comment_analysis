@@ -3,8 +3,8 @@ from dataclasses import replace
 from django.test import SimpleTestCase
 
 from ..providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
-from ..providers import ai_report_v2 as v2
-from ..services.ai_report_preparation_service import prepare_report_facts, validate_report_source_facts
+from ..providers import ai_report as report_types
+from ..services.ai_report_preparation_service import create_validation_criteria, validate_report_source_facts
 
 
 def comment(comment_id, likes=0, *, sequence=1, author="@demo", text="測試留言", parent=None):
@@ -14,8 +14,8 @@ def comment(comment_id, likes=0, *, sequence=1, author="@demo", text="測試留�
 class ReportPreparationTests(SimpleTestCase):
     def prepare(self, comments, **options):
         request = AIAnalysisRequest("test-video", "測試影片", tuple(comments))
-        video = options.pop("video", v2.ReportVideoV2("test-video", "測試影片"))
-        return prepare_report_facts(request, video, sort_order="newest", include_replies=True, **options)
+        video = options.pop("video", report_types.ReportVideo("test-video", "測試影片"))
+        return create_validation_criteria(request, video, sort_order="newest", include_replies=True, **options)
 
     def test_all_comments_are_retained_while_top_five_are_ranked(self):
         comments = tuple(comment(f"id-{n}", likes, sequence=n + 1) for n, likes in enumerate((389, 150, 100, 57, 43, 72)))
@@ -24,10 +24,10 @@ class ReportPreparationTests(SimpleTestCase):
         self.assertEqual(facts.sample.analyzed_comment_count, 6)
         self.assertEqual([item.like_count for item in facts.top_liked_comments], [389, 150, 100, 72, 57])
 
-    def test_replies_are_ranked_with_top_level_comments(self):
+    def test_replies_are_ranked_with_main_comments(self):
         facts = self.prepare((comment("parent", 1), comment("reply", 10, parent="parent")))
         self.assertEqual(facts.top_liked_comments[0].youtube_comment_id, "reply")
-        self.assertEqual((facts.sample.top_level_comment_count, facts.sample.reply_comment_count), (1, 1))
+        self.assertEqual((facts.sample.main_comment_count, facts.sample.reply_comment_count), (1, 1))
 
     def test_ties_use_sequence_then_id_not_input_order(self):
         facts = self.prepare((comment("b", 10, sequence=2), comment("a", 10, sequence=2), comment("z", 10)))
@@ -60,14 +60,14 @@ class ReportPreparationTests(SimpleTestCase):
             self.prepare(())
 
     def test_wrong_video_or_title_rejected(self):
-        for video in (v2.ReportVideoV2("other-video", "測試影片"), v2.ReportVideoV2("test-video", "不同標題")):
+        for video in (report_types.ReportVideo("other-video", "測試影片"), report_types.ReportVideo("test-video", "不同標題")):
             with self.subTest(video=video), self.assertRaises(ValueError):
                 self.prepare((comment("a"),), video=video)
 
     def test_displayed_count_difference_preserves_unknown_zero_and_negative(self):
         for displayed, expected in ((None, None), (1, 0), (0, -1), (10, 9)):
             with self.subTest(displayed=displayed):
-                video = v2.ReportVideoV2("test-video", "測試影片", displayed_comment_count=displayed)
+                video = report_types.ReportVideo("test-video", "測試影片", displayed_comment_count=displayed)
                 self.assertEqual(self.prepare((comment("a"),), video=video).displayed_comment_count_difference, expected)
 
     def test_repeated_text_crosses_names_and_normalizes_only_whitespace(self):
@@ -117,18 +117,18 @@ class ReportSourceValidationTests(SimpleTestCase):
     def setUp(self):
         comments = (comment("a", 10, text="重複"), comment("b", 5, text="重複", parent="a"))
         request = AIAnalysisRequest("video", "影片", comments)
-        self.facts = prepare_report_facts(request, v2.ReportVideoV2("video", "影片"), sort_order="newest", include_replies=True)
-        self.report = v2.AIReportV2(
+        self.facts = create_validation_criteria(request, report_types.ReportVideo("video", "影片"), sort_order="newest", include_replies=True)
+        self.report = report_types.AIReport(
             video=self.facts.video, sample=self.facts.sample,
-            provenance=v2.ReportProvenanceV2("fake", "fixture", "test", "2026-09-04T00:00:00+08:00"),
+            provenance=report_types.ReportProvenance("fake", "fixture", "test", "2026-09-04T00:00:00+08:00"),
             overall_summary="測試摘要", atmosphere="測試氛圍", sentiment=None,
-            topics=(v2.ReportTopicV2("議題", "摘要", "解讀", ("a",)),),
-            top_liked_comments=tuple(v2.TopLikedCommentV2(c.youtube_comment_id, c.author_display_name,
+            topics=(report_types.ReportTopic("議題", "摘要", "解讀", ("a",)),),
+            top_liked_comments=tuple(report_types.TopLikedComment(c.youtube_comment_id, c.author_display_name,
                                                         c.comment_text, c.like_count, "測試解讀")
                                      for c in self.facts.top_liked_comments),
             repeated_text_groups=self.facts.repeated_text_groups,
             display_name_activity=self.facts.display_name_activity,
-            conclusions=(v2.ReportInsightV2("結論", "說明", ("b",)),), limitations=("測試資料",),
+            conclusions=(report_types.ReportInsight("結論", "說明", ("b",)),), limitations=("測試資料",),
         )
 
     def test_matching_report_passes(self):
@@ -159,7 +159,7 @@ class ReportSourceValidationTests(SimpleTestCase):
     def test_unknown_reference_rejected_in_every_insight_section(self):
         for section in ("conclusions", "behavior_insights"):
             with self.subTest(section=section), self.assertRaises(ValueError):
-                report = replace(self.report, **{section: (v2.ReportInsightV2("標題", "說明", ("invented",)),)})
+                report = replace(self.report, **{section: (report_types.ReportInsight("標題", "說明", ("invented",)),)})
                 validate_report_source_facts(report, self.facts)
         with self.assertRaises(ValueError):
             topic = replace(self.report.topics[0], evidence_comment_ids=("invented",))

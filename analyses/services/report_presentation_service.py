@@ -1,4 +1,4 @@
-"""將已驗證的 v2 報告整理成畫面所需的 context。"""
+"""將已驗證的 報告整理成畫面所需的 context。"""
 
 from .ai_report_preparation_service import (
     apply_report_sample_scope,

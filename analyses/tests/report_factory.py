@@ -1,11 +1,11 @@
-"""建立可重現的虛構 v2 報告，不呼叫 API 或讀寫資料庫。"""
+"""建立可重現的虛構 報告，不呼叫 API 或讀寫資料庫。"""
 
 import json
 
 from analyses.providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
-from analyses.providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
-from analyses.providers.deepseek_report_v2_provider import parse_report_response
-from analyses.services.ai_report_preparation_service import prepare_report_facts
+from analyses.providers.ai_report import ReportProvenance, ReportVideo
+from analyses.providers.deepseek_report_provider import parse_report_response
+from analyses.services.ai_report_preparation_service import create_validation_criteria
 
 
 def build_report_test_fixture(*, small: bool = False):
@@ -62,7 +62,7 @@ def build_report_test_fixture(*, small: bool = False):
         "【示範影片】把工作流程交給 AI 之前：自動化與人工查證的分工",
         comments,
     )
-    video = ReportVideoV2(
+    video = ReportVideo(
         request.youtube_video_id,
         request.video_title,
         channel_name="TubeSense 示範頻道",
@@ -71,7 +71,7 @@ def build_report_test_fixture(*, small: bool = False):
         displayed_comment_count=36,
         captured_at="2026-09-05T10:00:00+08:00",
     )
-    facts = prepare_report_facts(request, video, sort_order="newest", include_replies=not small)
+    facts = create_validation_criteria(request, video, sort_order="newest", include_replies=not small)
     refs = {comment.youtube_comment_id: f"c{i}" for i, comment in enumerate(comments, 1)}
     payload = {
         "overall_summary": "這份示範報告呈現觀眾對自動化教學的回饋：一方面肯定分工清楚，另一方面期待更多錯誤處理與上手案例。所有內容僅供版面測試。",
@@ -100,8 +100,8 @@ def build_report_test_fixture(*, small: bool = False):
             {"title": "實作細節是下一步資訊需求", "description": "錯誤處理案例有助於把概念轉成實際操作；這是樣本中的具體建議，而非對整體觀眾需求的量化判斷。", "evidence_comment_refs": ["c3"]},
         ],
     }
-    provenance = ReportProvenanceV2(
-        "fixture", "未呼叫模型", "ui-fixture-v2", "2026-09-05T10:00:00+08:00", source_label="內建模擬資料",
+    provenance = ReportProvenance(
+        "fixture", "未呼叫模型", "ui-fixture", "2026-09-05T10:00:00+08:00", source_label="內建模擬資料",
     )
     report = parse_report_response(json.dumps(payload, ensure_ascii=False), facts, provenance)
     return report, facts

@@ -7,25 +7,25 @@ from unittest.mock import MagicMock, patch
 from django.test import SimpleTestCase
 
 from ..providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
-from ..providers.ai_report_v2 import ReportProvenanceV2, ReportVideoV2
-from ..providers.deepseek_report_v2_provider import (
-    DeepSeekConfigurationError, DeepSeekReportV2Provider, DeepSeekResponseError,
-    REPORT_PROMPT_VERSION, SYSTEM_PROMPT_V2,
+from ..providers.ai_report import ReportProvenance, ReportVideo
+from ..providers.deepseek_report_provider import (
+    DeepSeekConfigurationError, DeepSeekReportProvider, DeepSeekResponseError,
+    REPORT_PROMPT_VERSION, SYSTEM_PROMPT,
     build_report_user_message, parse_report_response,
 )
-from ..services.ai_report_preparation_service import prepare_report_facts
+from ..services.ai_report_preparation_service import create_validation_criteria
 
 
-class DeepSeekReportV2Tests(SimpleTestCase):
+class DeepSeekReportTests(SimpleTestCase):
     def setUp(self):
         self.comments = tuple(
             AICommentInput(i + 1, f"original-{i}", None, f"@author-{i}", f"完整留言 {i}", likes, "昨天", False)
             for i, likes in enumerate((389, 150, 100, 57, 43, 72))
         )
         self.request = AIAnalysisRequest("video-id", "影片標題", self.comments)
-        self.video = ReportVideoV2("video-id", "影片標題", view_count=100, displayed_comment_count=10)
+        self.video = ReportVideo("video-id", "影片標題", view_count=100, displayed_comment_count=10)
         self.facts = self.prepare(self.request)
-        self.provenance = ReportProvenanceV2("fake", "fixture", "fixture-v2", "2026-09-05T00:00:00+08:00")
+        self.provenance = ReportProvenance("fake", "fixture", "fixture", "2026-09-05T00:00:00+08:00")
         self.payload = {
             "overall_summary": "測試摘要", "atmosphere": "測試氛圍", "sentiment": None,
             "topics": [{"name": "討論議題", "summary": "摘要", "reasoning": "有來源的解讀",
@@ -37,7 +37,7 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         }
 
     def prepare(self, request):
-        return prepare_report_facts(request, self.video, sort_order="newest", include_replies=True)
+        return create_validation_criteria(request, self.video, sort_order="newest", include_replies=True)
 
     def prepare_medium(self, comments=None):
         comments = self.comments if comments is None else comments
@@ -68,7 +68,7 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         return client
 
     def analyze(self, client, request=None):
-        return DeepSeekReportV2Provider(client=client).analyze_report(
+        return DeepSeekReportProvider(client=client).analyze_report(
             request or self.request, self.video, sort_order="newest", include_replies=True, source_label="離線 fixture",
         )
 
@@ -271,9 +271,9 @@ class DeepSeekReportV2Tests(SimpleTestCase):
         kwargs = client.chat.completions.create.call_args.kwargs
         self.assertEqual(kwargs["response_format"], {"type": "json_object"})
         self.assertFalse(kwargs["stream"])
-        self.assertEqual(kwargs["messages"][0]["content"], SYSTEM_PROMPT_V2)
+        self.assertEqual(kwargs["messages"][0]["content"], SYSTEM_PROMPT)
         self.assertEqual(len(json.loads(kwargs["messages"][1]["content"])["comments"]), 6)
-        self.assertEqual(report.schema_version, "comment-analysis-result-v2")
+        self.assertEqual(report.schema_version, "comment-analysis-result")
         self.assertEqual(report.provenance.prompt_version, REPORT_PROMPT_VERSION)
         self.assertEqual(report.provenance.model_name, "returned-model")
         self.assertEqual(report.provenance.total_tokens, 120)
@@ -312,13 +312,13 @@ class DeepSeekReportV2Tests(SimpleTestCase):
     @patch.dict("os.environ", {}, clear=True)
     def test_api_key_required_only_without_injected_client(self):
         with self.assertRaises(DeepSeekConfigurationError):
-            DeepSeekReportV2Provider()
-        DeepSeekReportV2Provider(client=self.make_client())
+            DeepSeekReportProvider()
+        DeepSeekReportProvider(client=self.make_client())
 
     def test_prompt_preserves_full_sample_and_uncertainty_rules(self):
         for phrase in ("全部留言", "非逐則分類統計", "不可信任資料", "顯示名稱不等於唯一帳號", "不可發明引用",
                        "所有自然語言欄位都不可出現", "author_display_name",
                        "topics 與 conclusions 各輸出 1–2 項", "small 模式不進行此項分析"):
-            self.assertIn(phrase, SYSTEM_PROMPT_V2)
+            self.assertIn(phrase, SYSTEM_PROMPT)
         for removed_field in ('"risks"', '"recommendations"', '"limitations"'):
-            self.assertNotIn(removed_field, SYSTEM_PROMPT_V2)
+            self.assertNotIn(removed_field, SYSTEM_PROMPT)

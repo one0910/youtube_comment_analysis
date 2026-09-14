@@ -84,7 +84,7 @@ VIDEO_COMMENT_CONTINUATION_SELECTOR = (
     "> ytd-continuation-item-renderer"
 )
 
-TOP_LEVEL_COMMENT_SELECTOR = "#comment-container > #comment"
+MAIN_COMMENT_SELECTOR = "#comment-container > #comment"
 
 COMMENT_SECTION_SCROLL_ATTEMPTS = 30
 COMMENT_SECTION_SCROLL_DISTANCE = 1200
@@ -187,7 +187,7 @@ def get_youtube_comment_data_from_element(
 
 
 """取得目前可見留言區中的主留言討論串，排除回覆子討論串與隱藏區域。"""
-def get_loaded_top_level_comment_thread_elements(chrome_driver: WebDriver) -> list[WebElement]:
+def get_loaded_main_comment_thread_elements(chrome_driver: WebDriver) -> list[WebElement]:
 
     return [
         comment_thread_element
@@ -200,7 +200,7 @@ def get_loaded_top_level_comment_thread_elements(chrome_driver: WebDriver) -> li
 
 
 """依照 DOM 順序輸出已載入的主留言及其回覆。"""
-def iter_loaded_top_level_comment_data(
+def iter_loaded_main_comment_data(
     chrome_driver: WebDriver,
     youtube_video_id: str,
     maximum_comment_count: int | None = None,
@@ -209,18 +209,18 @@ def iter_loaded_top_level_comment_data(
 ) -> Iterator[YouTubeCommentData]:
     
 
-    comment_thread_elements = get_loaded_top_level_comment_thread_elements(chrome_driver=chrome_driver)[start_comment_thread_index:]
+    comment_thread_elements = get_loaded_main_comment_thread_elements(chrome_driver=chrome_driver)[start_comment_thread_index:]
     yielded_comment_count = 0
 
     for comment_thread_element in comment_thread_elements:
-        top_level_comment_element = comment_thread_element.find_element(By.CSS_SELECTOR, TOP_LEVEL_COMMENT_SELECTOR)
-        top_level_comment_data = get_youtube_comment_data_from_element(
+        main_comment_element = comment_thread_element.find_element(By.CSS_SELECTOR, MAIN_COMMENT_SELECTOR)
+        main_comment_data = get_youtube_comment_data_from_element(
             chrome_driver=chrome_driver,
-            comment_element=top_level_comment_element,
+            comment_element=main_comment_element,
             youtube_video_id=youtube_video_id,
         )
 
-        yield top_level_comment_data
+        yield main_comment_data
         yielded_comment_count += 1
         
         if maximum_comment_count is not None and yielded_comment_count >= maximum_comment_count:
@@ -252,7 +252,7 @@ def iter_loaded_top_level_comment_data(
             chrome_driver=chrome_driver,
             comment_thread_element=comment_thread_element,
             youtube_video_id=youtube_video_id,
-            parent_youtube_comment_id=top_level_comment_data.youtube_comment_id,
+            parent_youtube_comment_id=main_comment_data.youtube_comment_id,
             maximum_reply_count=remaining_comment_count,
         ):
             yield reply_comment_data
@@ -283,7 +283,7 @@ def load_next_comment_batch(chrome_driver: WebDriver,previous_comment_thread_cou
 
     try:
         WebDriverWait(chrome_driver,COMMENT_BATCH_LOADING_WAIT_SECONDS).until(
-            lambda current_driver: len(get_loaded_top_level_comment_thread_elements(chrome_driver=current_driver)) > previous_comment_thread_count
+            lambda current_driver: len(get_loaded_main_comment_thread_elements(chrome_driver=current_driver)) > previous_comment_thread_count
         )
     except TimeoutException:
         return False
@@ -601,12 +601,12 @@ class SeleniumYouTubeProvider(YouTubeProvider):
 
             while yielded_comment_count < target_comment_count:
                 loaded_comment_thread_count = len(
-                    get_loaded_top_level_comment_thread_elements(chrome_driver=chrome_driver)
+                    get_loaded_main_comment_thread_elements(chrome_driver=chrome_driver)
                 )
                 remaining_comment_count = target_comment_count - yielded_comment_count
 
-                # 透過iter_loaded_top_level_comment_data遍歷主留言及回覆
-                for comment_data in iter_loaded_top_level_comment_data(
+                # 透過iter_loaded_main_comment_data遍歷主留言及回覆
+                for comment_data in iter_loaded_main_comment_data(
                     chrome_driver=chrome_driver,
                     youtube_video_id=youtube_video_id,
                     maximum_comment_count=remaining_comment_count,

@@ -25,8 +25,8 @@ from .services.analysis_job_progress_service import build_analysis_stage_present
 from .providers.youtube_provider import (
     YouTubeVideoUnavailableError,
 )
-from .services.report_v2_presentation_service import build_report_context
-from .services.report_v2_result_service import ReportV2UnavailableError, load_latest_report_v2_for_job
+from .services.report_presentation_service import build_report_context
+from .services.report_result_service import ReportUnavailableError, load_latest_report_for_job
 from .tasks import execute_youtube_fetch_run_task
 
 
@@ -65,9 +65,8 @@ def overview(request: HttpRequest) -> HttpResponse:
 """顯示新增分析頁面並驗證 YouTube 影片網址。"""
 def new_analysis(request: HttpRequest) -> HttpResponse:
 
-    form = NewAnalysisForm(
-        request.POST if request.method == "POST" else None
-    )
+    form = NewAnalysisForm(request.POST if request.method == "POST" else None)
+    
     validated_input_video_url = None
     youtube_video_id = None
     video_preview_data = None
@@ -112,7 +111,7 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
     return render(request,"analyses/new_analysis.html",context)
 
 """收到開始分析請求後，建立一個等待處理的任務。"""
-@require_POST
+@require_POST #@require_POST表示這個 View 只接受 HTTP POST 請求。
 def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
     # 去資料庫取剛preview後的相關資料
     video_record = get_object_or_404( Video,id=video_id,)
@@ -128,7 +127,6 @@ def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
                 1.把「任務名稱＋參數」送進 Redis,以這裡為例，要送進radis的youtube_selenium Queue
                 2.把執行工作延後並交給 Worker，以這裡為例，execute_youtube_fetch_run_task就會交給Worker來執行
         '''
-        print(f"""fetch_run.id_1 => {fetch_run.id}""", )
         execute_youtube_fetch_run_task.delay(fetch_run_id=str(fetch_run.id))
     except Exception:
         logger.exception("無法將分析任務送入 Celery Queue。", extra={"analysis_job_id": str(created_analysis_job.id)})
@@ -146,26 +144,30 @@ def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
 """顯示指定分析任務目前的狀態。"""
 def analysis_job_detail(request: HttpRequest, analysis_job_id) -> HttpResponse:
 
+    # get_object_or_404()用來查詢指定 ID及某個欄位關聯的某個資料表的資料，如果找不到，就回應 HTTP 404。
+    # 以這裡為例，查詢指定 ID 的分析任務，並一起載入影片
     analysis_job = get_object_or_404(AnalysisJob.objects.select_related("video"),id=analysis_job_id)
     context = {
         "page_title": _("分析進度"),
         "analysis_job": analysis_job,
         "analysis_stages": build_analysis_stage_presentations(analysis_job=analysis_job),
-        "current_fetch_run": analysis_job.fetch_runs.order_by("-attempt_number").first(),
+        "current_fetch_run": analysis_job.fetch_runs.order_by("-attempt_number").first(), ##attempt_number  Model 的「第幾次抓取」欄位，-表示降冪排序，由大到小，不是把數值變成負數。
     }
 
     return render(request,"analyses/analysis_job_detail.html",context)
 
 
 """只回傳指定分析任務的進度區塊。"""
-@require_GET
+@require_GET #@require_GET表示這個 View 只接受 HTTP GET 請求。
 def analysis_job_progress(request: HttpRequest, analysis_job_id) -> HttpResponse:
 
+    # get_object_or_404()用來查詢指定 ID及某個欄位關聯的某個資料表的資料，如果找不到，就回應 HTTP 404。
+    # 以這裡為例，查詢指定 ID 的分析任務，並一起載入影片
     analysis_job = get_object_or_404(AnalysisJob.objects.select_related("video"),id=analysis_job_id)
     context = {
         "analysis_job": analysis_job,
         "analysis_stages": build_analysis_stage_presentations(analysis_job=analysis_job),
-        "current_fetch_run": analysis_job.fetch_runs.order_by("-attempt_number").first(),
+        "current_fetch_run": analysis_job.fetch_runs.order_by("-attempt_number").first(), #attempt_number  Model 的「第幾次抓取」欄位，-表示降冪排序，由大到小，不是把數值變成負數。
     }
     return render(request,"analyses/partials/analysis_job_progress_panel.html",context)
 
@@ -176,9 +178,9 @@ def analysis_report_detail(request: HttpRequest, analysis_job_id) -> HttpRespons
     if analysis_job.status != AnalysisJob.Status.COMPLETED:
         raise Http404("分析尚未完成。")
     try:
-        report, facts = load_latest_report_v2_for_job(analysis_job)
-    except ReportV2UnavailableError:
+        report, facts = load_latest_report_for_job(analysis_job)
+    except ReportUnavailableError:
         return HttpResponse("分析報告目前無法讀取。", status=404)
     context = build_report_context(report, facts)
     context["analysis_job"] = analysis_job
-    return render(request, "analyses/report_v2.html", context)
+    return render(request, "analyses/report.html", context)

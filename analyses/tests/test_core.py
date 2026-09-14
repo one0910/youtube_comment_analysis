@@ -40,7 +40,7 @@ from ..services.ai_analysis_request_service import (
     AIAnalysisInputUnavailableError,
     build_ai_analysis_request_from_fetch_run,
 )
-from ..tasks import execute_report_v2_analysis_task, execute_youtube_fetch_run_task
+from ..tasks import execute_report_analysis_task, execute_youtube_fetch_run_task
 
 from ..providers.youtube_provider import (
     YouTubeCommentData,
@@ -63,13 +63,13 @@ from ..providers.selenium_youtube_provider import (
     SeleniumYouTubeProvider,
     expand_comment_replies,
     get_comment_like_count,
-    get_loaded_top_level_comment_thread_elements,
+    get_loaded_main_comment_thread_elements,
     get_video_comment_count,
     get_video_like_count,
     get_youtube_comment_data_from_element,
     get_youtube_comment_id_from_url,
     iter_loaded_reply_comment_data,
-    iter_loaded_top_level_comment_data,
+    iter_loaded_main_comment_data,
     load_next_comment_batch,
     load_remaining_comment_replies,
     select_comment_sort_order,
@@ -522,12 +522,12 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
         chrome_driver = MagicMock()
         chrome_driver.find_elements.return_value = [visible_comment_thread,hidden_comment_thread]
 
-        comment_threads = get_loaded_top_level_comment_thread_elements(chrome_driver=chrome_driver)
+        comment_threads = get_loaded_main_comment_thread_elements(chrome_driver=chrome_driver)
 
         self.assertEqual(comment_threads,[visible_comment_thread])
 
     @patch("analyses.providers.selenium_youtube_provider.get_youtube_comment_data_from_element")
-    def test_loaded_top_level_comments_are_yielded_in_dom_order(self, mock_get_comment_data):
+    def test_loaded_main_comments_are_yielded_in_dom_order(self, mock_get_comment_data):
         """已載入的主留言應依照 DOM 順序逐筆輸出。"""
 
         chrome_driver = MagicMock()
@@ -539,7 +539,7 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
         second_comment_data = YouTubeCommentData(youtube_comment_id="UgzSecond123", youtube_video_id="dQw4w9WgXcQ", comment_text="第二則主留言")
         mock_get_comment_data.side_effect = [first_comment_data, second_comment_data]
 
-        comment_data = list(iter_loaded_top_level_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ"))
+        comment_data = list(iter_loaded_main_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ"))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzFirst123", "UgzSecond123"])
         self.assertEqual(first_comment_data.parent_youtube_comment_id, None)
@@ -554,7 +554,7 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
         chrome_driver.find_elements.return_value = [MagicMock(), MagicMock(), MagicMock()]
         mock_get_comment_data.return_value = YouTubeCommentData(youtube_comment_id="UgzFirst123", youtube_video_id="dQw4w9WgXcQ", comment_text="第一則主留言")
 
-        comment_data = list(iter_loaded_top_level_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", maximum_comment_count=1))
+        comment_data = list(iter_loaded_main_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", maximum_comment_count=1))
 
         self.assertEqual(len(comment_data), 1)
         self.assertEqual(mock_get_comment_data.call_count, 1)
@@ -567,7 +567,7 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
         chrome_driver.find_elements.return_value = [MagicMock(), MagicMock(), MagicMock()]
         mock_get_comment_data.return_value = YouTubeCommentData(youtube_comment_id="UgzThird123", youtube_video_id="dQw4w9WgXcQ", comment_text="第三則主留言")
 
-        comment_data = list(iter_loaded_top_level_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", start_comment_thread_index=2))
+        comment_data = list(iter_loaded_main_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", start_comment_thread_index=2))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzThird123"])
         self.assertEqual(mock_get_comment_data.call_count, 1)
@@ -576,18 +576,18 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
     @patch("analyses.providers.selenium_youtube_provider.load_remaining_comment_replies")
     @patch("analyses.providers.selenium_youtube_provider.expand_comment_replies", return_value=True)
     @patch("analyses.providers.selenium_youtube_provider.get_youtube_comment_data_from_element")
-    def test_loaded_replies_are_yielded_after_top_level_comment(self, mock_get_comment_data, mock_expand_replies, mock_load_remaining_replies, mock_iter_replies):
+    def test_loaded_replies_are_yielded_after_main_comment(self, mock_get_comment_data, mock_expand_replies, mock_load_remaining_replies, mock_iter_replies):
         """啟用回覆時，應先輸出主留言，再輸出它的回覆。"""
 
         chrome_driver = MagicMock()
         comment_thread_element = MagicMock()
         chrome_driver.find_elements.return_value = [comment_thread_element]
-        top_level_comment_data = YouTubeCommentData(youtube_comment_id="UgzParent123", youtube_video_id="dQw4w9WgXcQ", comment_text="主留言")
+        main_comment_data = YouTubeCommentData(youtube_comment_id="UgzParent123", youtube_video_id="dQw4w9WgXcQ", comment_text="主留言")
         reply_comment_data = YouTubeCommentData(youtube_comment_id="UgzReply123", youtube_video_id="dQw4w9WgXcQ", parent_youtube_comment_id="UgzParent123", comment_text="回覆留言")
-        mock_get_comment_data.return_value = top_level_comment_data
+        mock_get_comment_data.return_value = main_comment_data
         mock_iter_replies.return_value = iter([reply_comment_data])
 
-        comment_data = list(iter_loaded_top_level_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", include_replies=True))
+        comment_data = list(iter_loaded_main_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", include_replies=True))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzParent123", "UgzReply123"])
         mock_expand_replies.assert_called_once_with(chrome_driver=chrome_driver, comment_thread_element=comment_thread_element)
@@ -603,7 +603,7 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
         chrome_driver.find_elements.return_value = [MagicMock()]
         mock_get_comment_data.return_value = YouTubeCommentData(youtube_comment_id="UgzParent123", youtube_video_id="dQw4w9WgXcQ", comment_text="主留言")
 
-        comment_data = list(iter_loaded_top_level_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", include_replies=False))
+        comment_data = list(iter_loaded_main_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", include_replies=False))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzParent123"])
         mock_expand_replies.assert_not_called()
@@ -617,13 +617,13 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
 
         chrome_driver = MagicMock()
         chrome_driver.find_elements.return_value = [MagicMock(), MagicMock()]
-        top_level_comment_data = YouTubeCommentData(youtube_comment_id="UgzParent123", youtube_video_id="dQw4w9WgXcQ", comment_text="主留言")
+        main_comment_data = YouTubeCommentData(youtube_comment_id="UgzParent123", youtube_video_id="dQw4w9WgXcQ", comment_text="主留言")
         first_reply_data = YouTubeCommentData(youtube_comment_id="UgzReplyOne", youtube_video_id="dQw4w9WgXcQ", parent_youtube_comment_id="UgzParent123", comment_text="第一則回覆")
         second_reply_data = YouTubeCommentData(youtube_comment_id="UgzReplyTwo", youtube_video_id="dQw4w9WgXcQ", parent_youtube_comment_id="UgzParent123", comment_text="第二則回覆")
-        mock_get_comment_data.return_value = top_level_comment_data
+        mock_get_comment_data.return_value = main_comment_data
         mock_iter_replies.return_value = iter([first_reply_data, second_reply_data])
 
-        comment_data = list(iter_loaded_top_level_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", maximum_comment_count=2, include_replies=True))
+        comment_data = list(iter_loaded_main_comment_data(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", maximum_comment_count=2, include_replies=True))
 
         self.assertEqual([comment.youtube_comment_id for comment in comment_data], ["UgzParent123", "UgzReplyOne"])
         mock_load_remaining_replies.assert_called_once_with(chrome_driver=chrome_driver, comment_thread_element=chrome_driver.find_elements.return_value[0], maximum_reply_count=1)
@@ -633,7 +633,7 @@ class SeleniumYouTubeLoadedTopLevelCommentTests(SimpleTestCase):
 """測試 Selenium Provider 的主留言抓取入口。"""
 class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
 
-    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
+    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_main_comment_data")
     @patch("analyses.providers.selenium_youtube_provider.select_comment_sort_order")
     @patch("analyses.providers.selenium_youtube_provider.get_video_comment_count",return_value=2)
     @patch("analyses.providers.selenium_youtube_provider.check_youtube_video_is_available")
@@ -653,7 +653,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         self.assertEqual([comment.youtube_comment_id for comment in comment_data],["UgzFirst123","UgzSecond123"])
         chrome_driver.quit.assert_called_once()
 
-    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
+    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_main_comment_data")
     @patch("analyses.providers.selenium_youtube_provider.select_comment_sort_order")
     @patch("analyses.providers.selenium_youtube_provider.get_video_comment_count", return_value=2)
     @patch("analyses.providers.selenium_youtube_provider.check_youtube_video_is_available")
@@ -676,7 +676,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         mock_iter_comments.assert_called_once_with(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", maximum_comment_count=2, start_comment_thread_index=0, include_replies=True)
         chrome_driver.quit.assert_called_once()
 
-    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
+    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_main_comment_data")
     @patch("analyses.providers.selenium_youtube_provider.select_comment_sort_order")
     @patch("analyses.providers.selenium_youtube_provider.get_video_comment_count", return_value=1)
     @patch("analyses.providers.selenium_youtube_provider.check_youtube_video_is_available")
@@ -693,7 +693,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         mock_iter_comments.assert_called_once_with(chrome_driver=chrome_driver, youtube_video_id="dQw4w9WgXcQ", maximum_comment_count=1, start_comment_thread_index=0, include_replies=False)
         chrome_driver.quit.assert_called_once()
 
-    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
+    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_main_comment_data")
     @patch("analyses.providers.selenium_youtube_provider.get_video_comment_count", return_value=None)
     @patch("analyses.providers.selenium_youtube_provider.check_youtube_video_is_available")
     @patch("analyses.providers.selenium_youtube_provider.create_local_chrome_driver")
@@ -721,7 +721,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         chrome_driver.quit.assert_called_once()
 
     @patch("analyses.providers.selenium_youtube_provider.load_next_comment_batch", return_value=True)
-    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
+    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_main_comment_data")
     @patch("analyses.providers.selenium_youtube_provider.select_comment_sort_order")
     @patch("analyses.providers.selenium_youtube_provider.get_video_comment_count", return_value=3)
     @patch("analyses.providers.selenium_youtube_provider.check_youtube_video_is_available")
@@ -744,7 +744,7 @@ class SeleniumYouTubeCommentIteratorTests(SimpleTestCase):
         chrome_driver.quit.assert_called_once()
 
     @patch("analyses.providers.selenium_youtube_provider.load_next_comment_batch", return_value=False)
-    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_top_level_comment_data")
+    @patch("analyses.providers.selenium_youtube_provider.iter_loaded_main_comment_data")
     @patch("analyses.providers.selenium_youtube_provider.select_comment_sort_order")
     @patch("analyses.providers.selenium_youtube_provider.get_video_comment_count", return_value=100)
     @patch("analyses.providers.selenium_youtube_provider.check_youtube_video_is_available")
@@ -928,7 +928,7 @@ class SeleniumYouTubeReplyContinuationTests(SimpleTestCase):
 class SeleniumYouTubeLoadedReplyCommentTests(SimpleTestCase):
 
     @patch("analyses.providers.selenium_youtube_provider.get_youtube_comment_data_from_element")
-    def test_loaded_replies_use_top_level_comment_as_parent(self, mock_get_comment_data):
+    def test_loaded_replies_use_main_comment_as_parent(self, mock_get_comment_data):
         """回覆 DTO 應保存所屬主留言的 YouTube 留言 ID。"""
 
         chrome_driver = MagicMock()
@@ -1307,10 +1307,10 @@ class YouTubeFetchTaskTests(SimpleTestCase):
         self.assertEqual(execute_youtube_fetch_run_task.queue,"youtube_selenium")
         self.assertTrue(execute_youtube_fetch_run_task.ignore_result)
 
-    @patch("analyses.tasks.execute_report_v2_analysis_task.delay")
+    @patch("analyses.tasks.execute_report_analysis_task.delay")
     @patch("analyses.tasks.execute_youtube_fetch_run_by_id",return_value=12)
-    def test_task_executes_fetch_and_dispatches_v2_analysis(self,mock_execute_fetch_run, mock_ai_delay):
-        """抓取成功後才把同一筆 FetchRun 交給 V2 AI Task。"""
+    def test_task_executes_fetch_and_dispatches_analysis(self,mock_execute_fetch_run, mock_ai_delay):
+        """抓取成功後才把同一筆 FetchRun 交給  AI Task。"""
 
         fetch_run_id = str(uuid.uuid4())
         stored_comment_count = execute_youtube_fetch_run_task.run(fetch_run_id=fetch_run_id)
@@ -1319,21 +1319,21 @@ class YouTubeFetchTaskTests(SimpleTestCase):
         mock_execute_fetch_run.assert_called_once_with(fetch_run_id=fetch_run_id)
         mock_ai_delay.assert_called_once_with(fetch_run_id=fetch_run_id)
 
-    @patch("analyses.tasks.execute_report_v2_analysis_by_id")
-    def test_v2_analysis_task_uses_ai_queue_and_returns_result_id(self, mock_execute_analysis):
+    @patch("analyses.tasks.execute_report_analysis")
+    def test_analysis_task_uses_ai_queue_and_returns_result_id(self, mock_execute_analysis):
         result_id = uuid.uuid4()
         mock_execute_analysis.return_value = SimpleNamespace(id=result_id)
         fetch_run_id = str(uuid.uuid4())
 
-        actual_result_id = execute_report_v2_analysis_task.run(fetch_run_id=fetch_run_id)
+        actual_result_id = execute_report_analysis_task.run(fetch_run_id=fetch_run_id)
 
-        self.assertEqual(execute_report_v2_analysis_task.name, "analyses.execute_report_v2_analysis")
-        self.assertEqual(execute_report_v2_analysis_task.queue, "ai_analysis")
+        self.assertEqual(execute_report_analysis_task.name, "analyses.execute_report_analysis")
+        self.assertEqual(execute_report_analysis_task.queue, "ai_analysis")
         self.assertEqual(actual_result_id, str(result_id))
         mock_execute_analysis.assert_called_once_with(fetch_run_id=fetch_run_id)
 
-    @patch("analyses.tasks.mark_report_v2_dispatch_failed")
-    @patch("analyses.tasks.execute_report_v2_analysis_task.delay", side_effect=RuntimeError("AI Queue 無法連線"))
+    @patch("analyses.tasks.mark_report_dispatch_failed")
+    @patch("analyses.tasks.execute_report_analysis_task.delay", side_effect=RuntimeError("AI Queue 無法連線"))
     @patch("analyses.tasks.execute_youtube_fetch_run_by_id", return_value=12)
     def test_ai_dispatch_failure_is_recorded_and_reraised(self, mock_execute_fetch_run, mock_ai_delay, mark_failed):
         fetch_run_id = str(uuid.uuid4())
@@ -1582,7 +1582,7 @@ class CommentModelTests(TestCase):
             video_title="留言測試影片",
         )
 
-    def test_top_level_comment_can_be_created(self):
+    def test_main_comment_can_be_created(self):
         """主留言應能建立並由 Video 反向查詢。"""
 
         comment_record = Comment.objects.create(
@@ -2233,7 +2233,7 @@ class AIAnalysisRequestContractTests(SimpleTestCase):
 
     def test_analysis_request_calculates_comment_counts(self):
         self.assertEqual(self.analysis_request.comment_count, 2)
-        self.assertEqual(self.analysis_request.top_level_comment_count, 1)
+        self.assertEqual(self.analysis_request.main_comment_count, 1)
         self.assertEqual(self.analysis_request.reply_comment_count, 1)
 
 
@@ -2269,7 +2269,7 @@ class AnalysisResultModelTests(TestCase):
             "schema_version": "comment-analysis-result-v1",
             "analysis_mode": AnalysisResult.AnalysisMode.SMALL,
             "analyzed_comment_count": 2,
-            "top_level_comment_count": 1,
+            "main_comment_count": 1,
             "reply_comment_count": 1,
             "result_data": {
                 "overall_summary": "這是一份測試分析結果。",
@@ -2307,7 +2307,7 @@ class AnalysisResultModelTests(TestCase):
             with transaction.atomic():
                 self._create_analysis_result(
                     analyzed_comment_count=2,
-                    top_level_comment_count=2,
+                    main_comment_count=2,
                     reply_comment_count=1,
                 )
 
@@ -2330,7 +2330,7 @@ class AnalysisResultModelTests(TestCase):
             schema_version="comment-analysis-result-v1",
             analysis_mode=AnalysisResult.AnalysisMode.SMALL,
             analyzed_comment_count=2,
-            top_level_comment_count=1,
+            main_comment_count=1,
             reply_comment_count=1,
             result_data={"overall_summary": "測試"},
         )
@@ -2405,7 +2405,7 @@ class AIAnalysisRequestServiceTests(TestCase):
         self.assertEqual(analysis_request.youtube_video_id, "abcdefghijk")
         self.assertEqual(analysis_request.video_title, "AI 輸入資料測試影片")
         self.assertEqual(analysis_request.comment_count, 2)
-        self.assertEqual(analysis_request.top_level_comment_count, 1)
+        self.assertEqual(analysis_request.main_comment_count, 1)
         self.assertEqual(analysis_request.reply_comment_count, 1)
         self.assertEqual(analysis_request.comments[0].sequence, 1)
         self.assertEqual(analysis_request.comments[0].author_display_name, "抓取時主留言作者")

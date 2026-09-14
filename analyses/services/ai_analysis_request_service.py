@@ -9,7 +9,7 @@ from analyses.providers.ai_analysis_request import (
 class AIAnalysisInputUnavailableError(ValueError):
 
 
-  """將一次抓取保存的留言快照轉成 AI Provider 輸入。"""
+  """將所抓取的留言快照轉成 AI Provider 輸入。"""
 def build_ai_analysis_request_from_fetch_run(fetch_run: FetchRun) -> AIAnalysisRequest:
 
     if fetch_run.status != FetchRun.Status.COMPLETED:

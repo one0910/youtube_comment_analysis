@@ -1,14 +1,14 @@
-"""將資料庫中的 v2 JSON 報告還原成受驗證的 DTO。"""
+"""將資料庫中的 JSON 報告還原成受驗證的 DTO。"""
 
-from analyses.providers.ai_report_v2 import (
-    AIReportV2, DisplayNameActivityV2, IDENTITY_NOTICE, REPORT_SCHEMA_VERSION,
-    SENTIMENT_METHOD, SENTIMENT_NOTICE, RepeatedTextGroupV2, ReportInsightV2,
-    ReportProvenanceV2, ReportSampleV2, ReportTopicV2, ReportVideoV2,
-    SentimentCategoryV2, SentimentEstimateV2, TopLikedCommentV2,
+from analyses.providers.ai_report import (
+    AIReport, DisplayNameActivity, IDENTITY_NOTICE, REPORT_SCHEMA_VERSION,
+    SENTIMENT_METHOD, SENTIMENT_NOTICE, RepeatedTextGroup, ReportInsight,
+    ReportProvenance, ReportSample, ReportTopic, ReportVideo,
+    SentimentCategory, SentimentEstimate, TopLikedComment,
 )
 
 
-def load_report_v2_payload(payload: dict) -> AIReportV2:
+def load_report_payload(payload: dict) -> AIReport:
     """將已儲存 JSON 還原成受契約驗證的 DTO；衍生欄位不可被檔案竄改。"""
     report_keys = {
         "video", "sample", "provenance", "overall_summary", "atmosphere", "sentiment", "topics",
@@ -27,14 +27,14 @@ def load_report_v2_payload(payload: dict) -> AIReportV2:
         "youtube_video_id", "title", "channel_name", "thumbnail_url", "view_count", "like_count",
         "displayed_comment_count", "published_at", "duration_seconds", "captured_at",
     }, "video")
-    video = ReportVideoV2(**video_payload)
+    video = ReportVideo(**video_payload)
     sample_payload = _object(payload, "sample")
     _keys(sample_payload, {
-        "analyzed_comment_count", "top_level_comment_count", "reply_comment_count", "sort_order",
+        "analyzed_comment_count", "main_comment_count", "reply_comment_count", "sort_order",
         "include_replies", "analysis_mode",
     }, "sample")
     stored_mode = sample_payload["analysis_mode"]
-    sample = ReportSampleV2(**{key: value for key, value in sample_payload.items() if key != "analysis_mode"})
+    sample = ReportSample(**{key: value for key, value in sample_payload.items() if key != "analysis_mode"})
     if stored_mode != sample.analysis_mode.value:
         raise ValueError("樣本模式與留言數不一致。")
     provenance_payload = _object(payload, "provenance")
@@ -42,8 +42,8 @@ def load_report_v2_payload(payload: dict) -> AIReportV2:
         "provider_name", "model_name", "prompt_version", "generated_at", "source_label",
         "prompt_tokens", "completion_tokens", "total_tokens",
     }, "provenance")
-    return AIReportV2(
-        video=video, sample=sample, provenance=ReportProvenanceV2(**provenance_payload),
+    return AIReport(
+        video=video, sample=sample, provenance=ReportProvenance(**provenance_payload),
         overall_summary=payload["overall_summary"], atmosphere=payload["atmosphere"],
         sentiment=_load_sentiment(payload["sentiment"]),
         topics=tuple(_load_topic(item) for item in _array(payload, "topics")),
@@ -68,23 +68,23 @@ def _load_sentiment(value):
     for name in ("positive", "neutral", "negative"):
         item = _object(value, name)
         _keys(item, {"percentage", "description"}, f"sentiment.{name}")
-        categories[name] = SentimentCategoryV2(**item)
-    return SentimentEstimateV2(**categories)
+        categories[name] = SentimentCategory(**item)
+    return SentimentEstimate(**categories)
 
 
 def _load_topic(item):
     _keys(item, {"name", "summary", "reasoning", "evidence_comment_ids"}, "topic")
-    return ReportTopicV2(**{**item, "evidence_comment_ids": _string_array(item, "evidence_comment_ids")})
+    return ReportTopic(**{**item, "evidence_comment_ids": _string_array(item, "evidence_comment_ids")})
 
 
 def _load_top_comment(item):
     _keys(item, {"youtube_comment_id", "author_display_name", "comment_text", "like_count", "interpretation"}, "top comment")
-    return TopLikedCommentV2(**item)
+    return TopLikedComment(**item)
 
 
 def _load_repeated(item):
     _keys(item, {"normalized_text", "author_display_names", "comment_ids", "occurrence_count"}, "repeated group")
-    group = RepeatedTextGroupV2(
+    group = RepeatedTextGroup(
         item["normalized_text"], _string_array(item, "author_display_names"), _string_array(item, "comment_ids"),
     )
     if item["occurrence_count"] != group.occurrence_count:
@@ -94,7 +94,7 @@ def _load_repeated(item):
 
 def _load_activity(item):
     _keys(item, {"author_display_name", "thread_youtube_comment_id", "comment_ids", "comment_count"}, "activity")
-    activity = DisplayNameActivityV2(
+    activity = DisplayNameActivity(
         item["author_display_name"], item["thread_youtube_comment_id"], _string_array(item, "comment_ids"),
     )
     if item["comment_count"] != activity.comment_count:
@@ -104,7 +104,7 @@ def _load_activity(item):
 
 def _load_insight(item):
     _keys(item, {"title", "description", "evidence_comment_ids"}, "insight")
-    return ReportInsightV2(**{**item, "evidence_comment_ids": _string_array(item, "evidence_comment_ids")})
+    return ReportInsight(**{**item, "evidence_comment_ids": _string_array(item, "evidence_comment_ids")})
 
 
 def _object(owner: dict, key: str) -> dict:

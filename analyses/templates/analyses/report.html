@@ -36,7 +36,7 @@
         </div>
         <div class="rounded-lg bg-slate-100 p-4">
           <dt class="text-xs font-semibold text-slate-500">主留言</dt>
-          <dd class="mt-1 text-2xl font-bold tabular-nums">{{ report.sample.top_level_comment_count|intcomma }} <small class="text-sm font-normal">則</small></dd>
+          <dd class="mt-1 text-2xl font-bold tabular-nums">{{ report.sample.main_comment_count|intcomma }} <small class="text-sm font-normal">則</small></dd>
         </div>
         <div class="rounded-lg bg-slate-100 p-4">
           <dt class="text-xs font-semibold text-slate-500">回覆</dt>
@@ -67,7 +67,7 @@
         <span class="text-slate-700">{{ sample_mode_detail }}</span>
       </div>
       <p class="mt-1 text-sm leading-6 text-slate-800 sm:text-base sm:leading-7">
-        本次分析 <strong class="font-bold text-brand-navy">{{ report.sample.analyzed_comment_count }} 則留言</strong>（含 <strong class="font-bold text-brand-navy">{{ report.sample.top_level_comment_count }} 則主留言</strong>、<strong class="font-bold text-brand-navy">{{ report.sample.reply_comment_count }} 則回覆</strong>）
+        本次分析 <strong class="font-bold text-brand-navy">{{ report.sample.analyzed_comment_count }} 則留言</strong>（含 <strong class="font-bold text-brand-navy">{{ report.sample.main_comment_count }} 則主留言</strong>、<strong class="font-bold text-brand-navy">{{ report.sample.reply_comment_count }} 則回覆</strong>）
       </p>
     </div>
   </aside>
@@ -255,7 +255,7 @@
         <div class="rounded-lg bg-slate-100 p-5">
           <h3 class="text-lg font-semibold">{{ panel.item.title }}</h3>
           <div class="mt-2 text-base leading-7 text-slate-600" data-testid="behavior-description-with-evidence">
-            <span>{{ panel.item.description }}</span>{% include 'analyses/partials/report_v2_evidence.html' with evidence=panel.evidence %}
+            <span>{{ panel.item.description }}</span>{% include 'analyses/partials/report_evidence.html' with evidence=panel.evidence %}
           </div>
         </div>
       {% empty %}
@@ -281,7 +281,7 @@
             <span>{{ panel.item.title }}</span>
           </h3>
           <div class="mt-3 text-base leading-7 text-slate-600" data-testid="insight-description-with-evidence">
-            <span>{{ panel.item.description }}</span>{% include 'analyses/partials/report_v2_evidence.html' with evidence=panel.evidence %}
+            <span>{{ panel.item.description }}</span>{% include 'analyses/partials/report_evidence.html' with evidence=panel.evidence %}
           </div>
         </div>
       {% empty %}

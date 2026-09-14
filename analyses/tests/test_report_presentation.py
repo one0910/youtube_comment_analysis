@@ -6,13 +6,13 @@ from django.shortcuts import render
 from django.urls import NoReverseMatch, include, path, reverse
 
 from .. import urls as analyses_urls
-from ..services.report_v2_presentation_service import build_report_context
-from .report_v2_factory import build_report_test_fixture
+from ..services.report_presentation_service import build_report_context
+from .report_factory import build_report_test_fixture
 
 
 def report_template_test_view(request):
     report, facts = build_report_test_fixture(small=request.GET.get("sample") == "small")
-    return render(request, "analyses/report_v2.html", build_report_context(report, facts))
+    return render(request, "analyses/report.html", build_report_context(report, facts))
 
 
 urlpatterns = [
@@ -24,26 +24,26 @@ urlpatterns = [
 
 
 @override_settings(ROOT_URLCONF=__name__)
-class ReportV2PresentationTests(SimpleTestCase):
+class ReportPresentationTests(SimpleTestCase):
     def setUp(self):
         self.url = reverse("analyses:analysis_report_detail")
 
-    @patch("analyses.providers.deepseek_report_v2_provider.DeepSeekReportV2Provider.analyze_report")
+    @patch("analyses.providers.deepseek_report_provider.DeepSeekReportProvider.analyze_report")
     def test_report_template_uses_fixture_without_api_or_database(self, analyze):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "analyses/report_v2.html")
+        self.assertTemplateUsed(response, "analyses/report.html")
         self.assertContains(response, "影片分析報告 | TubeSense AI")
         self.assertEqual(response.context["report"].sample.analyzed_comment_count, 30)
         self.assertEqual([c.like_count for c in response.context["report"].top_liked_comments], [389, 150, 100, 72, 57])
         analyze.assert_not_called()
 
     def test_development_preview_routes_are_removed(self):
-        for name in ("report_v2_preview", "report_v2_real_preview"):
+        for name in ("report_preview", "report_real_preview"):
             with self.subTest(name=name), self.assertRaises(NoReverseMatch):
                 reverse(f"analyses:{name}")
-        self.assertEqual(self.client.get("/analyses/reports/preview/v2/").status_code, 404)
-        self.assertEqual(self.client.get("/analyses/reports/preview/v2/real/").status_code, 404)
+        self.assertEqual(self.client.get("/analyses/reports/preview/report_types/").status_code, 404)
+        self.assertEqual(self.client.get("/analyses/reports/preview/report_types/real/").status_code, 404)
 
     def test_all_report_sections_render(self):
         response = self.client.get(self.url)
@@ -110,7 +110,7 @@ class ReportV2PresentationTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "小型樣本，以文字描述為主")
         self.assertContains(response, "3 則留言")
-        self.assertEqual(response.context["report"].sample.top_level_comment_count, 3)
+        self.assertEqual(response.context["report"].sample.main_comment_count, 3)
         self.assertEqual(response.context["report"].sample.reply_comment_count, 0)
         self.assertEqual(response.context["report"].repeated_text_groups, ())
         self.assertNotContains(response, 'data-testid="sentiment-donut"')
@@ -139,7 +139,7 @@ class ReportV2PresentationTests(SimpleTestCase):
         report, facts = build_report_test_fixture()
         attack = '<script>alert("x")</script>'
         report = replace(report, overall_summary=attack)
-        with patch("analyses.tests.test_report_v2_presentation.build_report_test_fixture", return_value=(report, facts)):
+        with patch("analyses.tests.test_report_presentation.build_report_test_fixture", return_value=(report, facts)):
             response = self.client.get(self.url)
         self.assertNotContains(response, attack)
         self.assertContains(response, "&lt;script&gt;")
@@ -173,7 +173,7 @@ class ReportV2PresentationTests(SimpleTestCase):
     def test_unknown_video_counts_are_displayed_as_unknown_not_none_or_zero(self):
         report, facts = build_report_test_fixture()
         video = replace(report.video, view_count=None, like_count=None, displayed_comment_count=None)
-        with patch("analyses.tests.test_report_v2_presentation.build_report_test_fixture", return_value=(replace(report, video=video), replace(facts, video=video))):
+        with patch("analyses.tests.test_report_presentation.build_report_test_fixture", return_value=(replace(report, video=video), replace(facts, video=video))):
             response = self.client.get(self.url)
         self.assertContains(response, "影片按讚 未知")
         self.assertContains(response, "YouTube 顯示留言 未知")
@@ -182,7 +182,7 @@ class ReportV2PresentationTests(SimpleTestCase):
     def test_page_uses_project_tailwind_bundle_without_standalone_stylesheet(self):
         response = self.client.get(self.url)
         self.assertContains(response, '/static/css/app.css')
-        self.assertNotContains(response, 'report-v2.css')
+        self.assertNotContains(response, 'report.css')
 
     def test_report_navigation_is_highlighted_in_desktop_and_mobile_sidebars(self):
         response = self.client.get(self.url)

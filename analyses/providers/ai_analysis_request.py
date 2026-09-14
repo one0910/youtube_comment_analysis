@@ -53,7 +53,7 @@ class AIAnalysisRequest:
         return len(self.comments)
 
     @property
-    def top_level_comment_count(self) -> int:
+    def main_comment_count(self) -> int:
         return sum(not comment.parent_youtube_comment_id for comment in self.comments)
 
     @property

@@ -50,7 +50,8 @@ def fetch_and_store_youtube_comments(
 
             processed_youtube_comment_ids.add(single_comment_data.youtube_comment_id)
             
-            _save_fetch_progress(
+            # 更新fetch_run資料表裡的已抓留言數，用以在該階段顯示已抓的留言數
+            _update_fetched_comment(
                 fetch_run=fetch_run,
                 fetched_comment_count=len(processed_youtube_comment_ids),
             )
@@ -59,6 +60,7 @@ def fetch_and_store_youtube_comments(
         analysis_job.current_stage = AnalysisJob.Stage.COMMENT_NORMALIZATION
         analysis_job.save(update_fields=["current_stage", "updated_at"])
 
+        # 將留言儲存到comment的資料表後，最後再做一個欄位為paraent_comment_id的主留言外key補償
         _resolve_unresolved_parent_comments(video_record=video_record)
 
     finally:
@@ -75,7 +77,7 @@ def fetch_and_store_youtube_comments(
     return len(processed_youtube_comment_ids)
 
 """讓進度頁能在 Selenium 抓取期間讀到最新留言數。"""
-def _save_fetch_progress(fetch_run: FetchRun, fetched_comment_count: int) -> None:
+def _update_fetched_comment(fetch_run: FetchRun, fetched_comment_count: int) -> None:
     
     fetch_run.fetched_comment_count = fetched_comment_count
     FetchRun.objects.filter(pk=fetch_run.pk).update(fetched_comment_count=fetched_comment_count)
@@ -150,9 +152,9 @@ def _save_comment_and_snapshot(
     return comment_record
 
 
+"""父留言稍後出現時，補上回覆留言的 ForeignKey。"""
 @transaction.atomic
 def _resolve_unresolved_parent_comments(video_record: Video) -> None:
-    """父留言稍後出現時，補上回覆留言的 ForeignKey。"""
 
     unresolved_reply_records = list(
         Comment.objects

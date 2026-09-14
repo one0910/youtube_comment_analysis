@@ -1,4 +1,4 @@
-"""已儲存 v2 報告的離線載入測試，不呼叫 DeepSeek。"""
+"""已儲存 報告的離線載入測試，不呼叫 DeepSeek。"""
 
 from copy import deepcopy
 from dataclasses import asdict
@@ -6,21 +6,21 @@ import json
 
 from django.test import SimpleTestCase
 
-from ..services.report_v2_artifact_service import load_report_v2_payload
-from .report_v2_factory import build_report_test_fixture
+from ..services.report_artifact_service import load_report_payload
+from .report_factory import build_report_test_fixture
 
 
-class ReportV2ArtifactLoaderTests(SimpleTestCase):
+class ReportArtifactLoaderTests(SimpleTestCase):
     def setUp(self):
         self.report, self.facts = build_report_test_fixture()
         self.payload = json.loads(json.dumps(asdict(self.report), ensure_ascii=False))
 
     def test_round_trip_restores_validated_report(self):
-        self.assertEqual(load_report_v2_payload(self.payload), self.report)
+        self.assertEqual(load_report_payload(self.payload), self.report)
 
     def test_legacy_empty_report_sections_are_ignored(self):
         self.payload.update(risks=[], recommendations=[])
-        self.assertEqual(load_report_v2_payload(self.payload), self.report)
+        self.assertEqual(load_report_payload(self.payload), self.report)
 
     def test_derived_and_unknown_fields_cannot_be_changed(self):
         cases = (
@@ -35,10 +35,10 @@ class ReportV2ArtifactLoaderTests(SimpleTestCase):
                 payload = deepcopy(self.payload)
                 mutate(payload)
                 with self.assertRaises(ValueError):
-                    load_report_v2_payload(payload)
+                    load_report_payload(payload)
 
     def test_reference_fields_must_remain_arrays(self):
         payload = deepcopy(self.payload)
         payload["topics"][0]["evidence_comment_ids"] = "demo-1"
         with self.assertRaises(ValueError):
-            load_report_v2_payload(payload)
+            load_report_payload(payload)
