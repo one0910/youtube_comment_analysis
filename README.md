@@ -36,7 +36,7 @@ TubeSense AI 是一個 YouTube 留言 AI 分析平台，也是用來練習 Djang
 | 前端互動 | Django Template + HTMX | 表單驗證、局部更新、進度輪詢 |
 | 樣式 | Tailwind CSS（規劃） | 依 Stitch 視覺稿建立 RWD 介面 |
 | 主要資料庫 | PostgreSQL | 影片、留言、任務、Log 與分析結果 |
-| 開發初期資料庫 | SQLite | 學習 Django 與建立初始資料表，之後切換 PostgreSQL |
+| 備份／離線測試資料庫 | SQLite | 已切換 PostgreSQL，僅明確指定 DATABASE_ENGINE=sqlite 時使用 |
 | 暫存與 Broker | Redis | Celery Broker、快取與短期狀態 |
 | 背景任務 | Celery | 執行 API／Selenium 抓取和 AI 分析 |
 | 資料來源 | Selenium | 瀏覽器自動化取得影片與留言，保留練習價值 |
@@ -106,15 +106,23 @@ Provider  隔離 Selenium、YouTube API 與未來 AI 供應商
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r .\requirements-dev.txt
+```
+
+首次安裝請從 `.env.postgres.example` 複製建立 `.env.postgres` 並設定密碼；已建立者不要覆蓋。Django 與 Celery 會自動讀取這份設定。啟動資料庫後再執行 migration：
+
+```powershell
+docker compose up -d postgres
 python manage.py migrate
 ```
 
+資料保存、連線與 SQLite 退回方式請見 [POSTGRESQL.md](docs/POSTGRESQL.md)。
+
 ### 啟動目前的 Django 專案
 
-先啟動 Redis，再分別開啟 Celery Worker 與 Django Server：
+先啟動 PostgreSQL 與 Redis，再分別開啟 Celery Worker 與 Django Server：
 
 ```powershell
-docker compose up -d redis
+docker compose up -d postgres redis
 celery -A config worker -l info -P solo -Q youtube_selenium,ai_analysis
 ```
 

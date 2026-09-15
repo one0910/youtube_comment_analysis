@@ -11,9 +11,14 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# 本機共用 Docker 的連線設定；部署環境變數優先，不覆蓋既有值。
+load_dotenv(BASE_DIR / ".env.postgres", override=False)
 
 
 # Quick-start development settings - unsuitable for production
@@ -79,12 +84,27 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", "postgresql")
+if DATABASE_ENGINE == "sqlite":
+    # 僅供明確指定的離線測試或搬遷退回，不在 PostgreSQL 故障時自動切換。
+    DATABASES = {"default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }}
+elif DATABASE_ENGINE == "postgresql":
+    if not os.getenv("POSTGRES_PASSWORD"):
+        raise ImproperlyConfigured("請在 .env.postgres 或環境變數設定 POSTGRES_PASSWORD。")
+    DATABASES = {"default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("POSTGRES_DB", "tubesense"),
+        "USER": os.getenv("POSTGRES_USER", "admin"),
+        "PASSWORD": os.environ["POSTGRES_PASSWORD"],
+        "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
+        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+        "OPTIONS": {"connect_timeout": 10},
+    }}
+else:
+    raise ImproperlyConfigured("DATABASE_ENGINE 必須是 postgresql 或 sqlite。")
 
 
 # Password validation
