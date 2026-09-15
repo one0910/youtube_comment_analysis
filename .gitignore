@@ -16,3 +16,4 @@ media/
 /.vscode/settings.json
 /local_debug
 /temporary
+/backups/

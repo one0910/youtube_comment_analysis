@@ -70,6 +70,28 @@ docker compose exec postgres psql -U admin -d tubesense
 
 ## 資料保存與停止
 
+### 備份與獨立還原驗證
+
+2026-09-15 已實際完成一次驗證並得到 `PASS`：`backups/postgres/20260915T150436Z_2e9fc2d4/`。欄位比較保留有效欄位的相對順序，但忽略歷史刪除欄位留下的位置編號空缺，避免把正常的 pg_dump/restore 重建誤判為差異。
+
+先停止 Django 與 Celery，並保持 PostgreSQL 容器啟動。在專案根目錄執行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/backup_postgres.py --verify
+```
+
+腳本使用容器內的 `pg_dump` 產生 custom-format 備份，再用 `pg_restore` 還原到全新且唯一命名的 `tubesense_restore_check_*` 資料庫，不覆蓋 `tubesense`。比對所有 public 資料表的完整資料內容（含重複列）、欄位、約束、索引及序列值，並確認原資料在操作前後沒有變更。只有成功時才輸出 `PASS` 並在 manifest 標記 `verified: true`；遇到錯誤不代表備份已驗證。
+
+輸出位於 `backups/postgres/<UTC時間與識別碼>/`：`tubesense.dump` 是備份，`manifest.json` 記錄 SHA-256、資料筆數、比對摘要及驗證庫名稱。此目錄已排除 Git。驗證庫保留供檢查，不會自動刪除；確認不再需要後再明確指定該驗證庫清理。
+
+只備份、不建立還原驗證庫：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/backup_postgres.py
+```
+
+限制：此腳本針對本專案的本機 Compose PostgreSQL。備份是單一資料庫備份，不包含 PostgreSQL 叢集帳號/密碼、Docker 設定或媒體檔案；跨機還原須先準備帳號與連線設定。本機驗證使用管理帳號並略過擁有者/權限還原，不代表已驗證正式環境權限配置。備份含敏感資料且未加密，不要公開；本機磁碟上的備份也不能防止整台電腦損壞，應另存安全的異地副本。
+
 資料位於 Docker volume `tubesense-postgres-data`。停止容器不會刪除資料：
 
 ```powershell

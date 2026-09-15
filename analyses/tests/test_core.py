@@ -159,21 +159,21 @@ class AnalysisJobProgressServiceTests(SimpleTestCase):
         stage_presentations = build_analysis_stage_presentations(analysis_job=analysis_job)
 
         self.assertEqual([stage.state for stage in stage_presentations],[AnalysisStageState.COMPLETED, AnalysisStageState.CURRENT, AnalysisStageState.WAITING, AnalysisStageState.WAITING, AnalysisStageState.WAITING])
-        self.assertEqual(stage_presentations[1].status_label,"準備中")
+        self.assertEqual(stage_presentations[1].status_label,"目前處理中...")
 
     def test_running_normalization_displays_third_stage_in_progress(self):
         analysis_job = AnalysisJob(status=AnalysisJob.Status.RUNNING,current_stage=AnalysisJob.Stage.COMMENT_NORMALIZATION)
         stage_presentations = build_analysis_stage_presentations(analysis_job=analysis_job)
 
         self.assertEqual([stage.state for stage in stage_presentations],[AnalysisStageState.COMPLETED, AnalysisStageState.COMPLETED, AnalysisStageState.CURRENT, AnalysisStageState.WAITING, AnalysisStageState.WAITING])
-        self.assertEqual(stage_presentations[2].status_label,"進行中")
+        self.assertEqual(stage_presentations[2].status_label,"目前處理中...")
 
     def test_awaiting_ai_displays_ai_stage_as_current_and_waiting(self):
         analysis_job = AnalysisJob(status=AnalysisJob.Status.AWAITING_ANALYSIS,current_stage=AnalysisJob.Stage.AI_ANALYSIS)
         stage_presentations = build_analysis_stage_presentations(analysis_job=analysis_job)
 
         self.assertEqual([stage.state for stage in stage_presentations],[AnalysisStageState.COMPLETED, AnalysisStageState.COMPLETED, AnalysisStageState.COMPLETED, AnalysisStageState.CURRENT, AnalysisStageState.WAITING])
-        self.assertEqual(stage_presentations[3].status_label,"等待中")
+        self.assertEqual(stage_presentations[3].status_label,"目前處理中...")
 
     def test_failed_job_marks_current_stage_as_failed_and_keeps_future_stages_waiting(self):
         analysis_job = AnalysisJob(status=AnalysisJob.Status.FAILED,current_stage=AnalysisJob.Stage.COMMENT_NORMALIZATION,error_message="模擬留言清理失敗")
