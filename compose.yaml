@@ -1,6 +1,87 @@
 name: tubesense-ai
 
 services:
+  web:
+    image: tubesense-ai-app:local
+    build:
+      context: .
+    container_name: tubesense-web
+    env_file:
+      - .env.postgres
+      - path: .env.docker
+        required: false
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+    command:
+      - sh
+      - -c
+      - python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120
+    ports:
+      - "127.0.0.1:8100:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      selenium:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 20s
+    init: true
+    restart: unless-stopped
+
+  worker:
+    image: tubesense-ai-app:local
+    container_name: tubesense-worker
+    env_file:
+      - .env.postgres
+      - path: .env.docker
+        required: false
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-P", "solo", "-Q", "youtube_selenium,ai_analysis"]
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      selenium:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+
+  selenium:
+    image: selenium/standalone-chromium:4.46.0-20260707
+    container_name: tubesense-selenium
+    shm_size: 2gb
+    environment:
+      SE_NODE_MAX_SESSIONS: "1"
+      SE_NODE_SESSION_TIMEOUT: "180"
+    ports:
+      - "127.0.0.1:4444:4444"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:4444/wd/hub/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
   postgres:
     image: postgres:17-alpine
     container_name: tubesense-postgres
@@ -36,6 +117,8 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: tubesense-redisinsight
+    profiles:
+      - local-tools
     ports:
       - "127.0.0.1:5541:5540"
     volumes:

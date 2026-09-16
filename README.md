@@ -136,6 +136,25 @@ python manage.py runserver
 瀏覽 `http://127.0.0.1:8000/`。真實 AI 分析還需要目前 PowerShell 能讀取
 `DEEPSEEK_API_KEY`；金鑰只放在環境變數，不寫入專案檔案。
 
+### 使用 Docker 啟動完整服務
+
+先確認 PowerShell 能讀取 `DEEPSEEK_API_KEY`。可選擇從 `.env.docker.example` 建立不提交 Git 的 `.env.docker`，設定隨機的 `DJANGO_SECRET_KEY`。接著執行：
+
+```powershell
+docker compose up -d --build
+docker compose ps
+```
+
+瀏覽 `http://127.0.0.1:8100/`。此模式包含 Gunicorn Web、Celery Worker、Selenium Chromium、PostgreSQL 與 Redis；不需再從 PyCharm 啟動 Django/Celery。
+
+RedisInsight 只供本機檢查 Redis 使用，預設不會啟動。需要時使用：
+
+```powershell
+docker compose --profile local-tools up -d redisinsight
+```
+
+詳細說明請見 [DOCKER.md](docs/DOCKER.md)。
+
 ## 開發原則
 
 - 先打通一條可驗證的主要流程，再增加進階功能。

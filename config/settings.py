@@ -19,18 +19,38 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 本機共用 Docker 的連線設定；部署環境變數優先，不覆蓋既有值。
 load_dotenv(BASE_DIR / ".env.postgres", override=False)
+load_dotenv(BASE_DIR / ".env.docker", override=False)
+
+
+def get_boolean_environment_variable(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized_value = value.strip().lower()
+    if normalized_value in {"1", "true", "yes", "on"}:
+        return True
+    if normalized_value in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(f"{name} 必須是 true 或 false。")
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-zo&096n=4%rruf&lan437z-4lb*&t#ha0_$d9kqudg=&oy#!0h'
+SECRET_KEY = os.getenv(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-zo&096n=4%rruf&lan437z-4lb*&t#ha0_$d9kqudg=&oy#!0h",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = get_boolean_environment_variable("DJANGO_DEBUG", True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
+    if host.strip()
+]
 
 # 本機大量清理測試資料：允許 Admin 提交不限數量的選取 ID。
 # 正式部署時應恢復有限上限，避免過大的表單耗用資源。
@@ -60,6 +80,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if not DEBUG:
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 ROOT_URLCONF = 'config.urls'
 
@@ -147,6 +170,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]

@@ -23,7 +23,8 @@ docker compose ps postgres
 本機日常啟動：
 
 ```powershell
-docker compose up -d postgres redis redisinsight
+docker compose up -d postgres redis
+docker compose --profile local-tools up -d redisinsight  # 需要 Redis 圖形介面時才執行
 .\.venv\Scripts\python.exe manage.py runserver 8100
 ```
 

@@ -1,4 +1,3 @@
-from rich import print as rprint
 from collections.abc import Iterator
 from time import sleep
 from urllib.parse import parse_qs, urljoin, urlparse

@@ -278,10 +278,10 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 目標：使用可重建的容器部署到 AWS EC2，並保留後續擴充空間。
 
 - [x] 建立開發環境 Redis／RedisInsight Compose。
-- [ ] 建立 Django Dockerfile 與 production 啟動方式。
+- [x] 建立 Django Dockerfile 與 Gunicorn 啟動方式。
 - [ ] 建立 Docker Compose：Nginx、Web、Worker、Redis、PostgreSQL。
-- [ ] 使用官方 Selenium Standalone Chrome 容器並固定版本。
-- [ ] Selenium 容器設定足夠 shared memory，連接埠不公開到網際網路。
+- [x] 使用官方 Selenium Standalone Chromium 容器並固定版本。
+- [x] Selenium 容器設定足夠 shared memory，連接埠只綁定本機介面。
 - [ ] 分離 development 與 production 設定。
 - [ ] 在本機完成完整容器整合測試。
 - [ ] 規劃 ECR Image 推送流程。
