@@ -1,0 +1,134 @@
+name: tubesense-ai-production
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  nginx:
+    image: nginx:1.30.4-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/tubesense.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    init: true
+    restart: unless-stopped
+    logging: *default-logging
+
+  web:
+    image: tubesense-ai-app:production
+    build:
+      context: .
+    env_file:
+      - .env.postgres
+      - .env.production
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+      DJANGO_DEBUG: "false"
+    command:
+      - sh
+      - -c
+      - python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --timeout 120
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      selenium:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 6
+      start_period: 30s
+    init: true
+    restart: unless-stopped
+    logging: *default-logging
+
+  worker:
+    image: tubesense-ai-app:production
+    env_file:
+      - .env.postgres
+      - .env.production
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
+      DJANGO_DEBUG: "false"
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-P", "solo", "--concurrency=1", "-Q", "youtube_selenium,ai_analysis"]
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      selenium:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    logging: *default-logging
+
+  selenium:
+    image: selenium/standalone-chromium:4.46.0-20260707
+    shm_size: 2gb
+    environment:
+      SE_NODE_MAX_SESSIONS: "1"
+      SE_NODE_SESSION_TIMEOUT: "180"
+      SE_START_VNC: "false"
+      SE_START_NO_VNC: "false"
+      SE_JAVA_OPTS: "-Xms64m -Xmx256m"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:4444/wd/hub/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging
+
+  postgres:
+    image: postgres:17-alpine
+    env_file:
+      - .env.postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  redis_data:

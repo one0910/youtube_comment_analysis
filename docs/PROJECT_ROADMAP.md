@@ -261,7 +261,7 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 - [x] Selenium 解析、回覆展開、Emoji、去重與常見失敗情境測試。
 - [ ] 建立可重現的真實影片清單與 YouTube 版面變動偵測測試。
 - [x] 移除未被正式流程使用的 Report V1 DeepSeek Provider、執行 Service、Fake Provider 與舊測試。
-- [ ] 環境變數管理 Secret Key、API Key 與資料庫密碼。
+- [x] 使用不提交 Git 的環境檔管理 Secret Key、API Key 與資料庫密碼。
 - [ ] 設定 production 的 `DEBUG`、`ALLOWED_HOSTS`、CSRF、HTTPS 與安全 Header。
 - [ ] 加入後端結構化 Log、健康檢查與錯誤追蹤。
 - [ ] 定義資料保留、任務清理與備份方式。
@@ -279,15 +279,15 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 
 - [x] 建立開發環境 Redis／RedisInsight Compose。
 - [x] 建立 Django Dockerfile 與 Gunicorn 啟動方式。
-- [ ] 建立 Docker Compose：Nginx、Web、Worker、Redis、PostgreSQL。
+- [x] 建立正式環境 Docker Compose：Nginx、Web、單一 Worker、Redis、PostgreSQL 與 Selenium。
 - [x] 使用官方 Selenium Standalone Chromium 容器並固定版本。
 - [x] Selenium 容器設定足夠 shared memory，連接埠只綁定本機介面。
 - [x] 針對 `t3.micro` 採用單一 Gunicorn Worker、單一 Celery Worker，並關閉 Selenium VNC／noVNC及限制 Java Heap。
-- [ ] 分離 development 與 production 設定。
-- [ ] 在本機完成完整容器整合測試。
+- [x] 分離 development 與 production Compose，正式環境只公開 Nginx HTTP Port。
+- [x] 在本機完成完整容器整合測試（Nginx、Web、Worker、Redis、PostgreSQL、Selenium）。
 - [ ] 規劃 ECR Image 推送流程。
 - [ ] 部署到 EC2，設定 Domain、HTTPS、Security Group 與 SSM。
-- [ ] 決定 PostgreSQL 使用 RDS 或 EC2 容器。
+- [x] 第一版為控制成本，PostgreSQL 使用 EC2 內的容器與 named volume；升級規模後再評估 RDS。
 - [ ] 規劃 CloudWatch、S3、備份與 Secret 管理。
 - [ ] 完成正式環境 smoke test 與復原流程。
 
