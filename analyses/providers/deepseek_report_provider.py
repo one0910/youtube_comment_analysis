@@ -1,6 +1,7 @@
 """正式 報告使用的 DeepSeek Provider。"""
 
 import json
+import logging
 import os
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -20,7 +21,11 @@ from analyses.services.ai_report_preparation_service import (
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
-REPORT_PROMPT_VERSION = "comment-analysis-v7"
+REPORT_PROMPT_VERSION = "comment-analysis-v8"
+REPORT_RESPONSE_MAX_ATTEMPTS = 2
+REPORT_RESPONSE_TEMPERATURE = 0
+
+logger = logging.getLogger(__name__)
 
 
 class DeepSeekConfigurationError(RuntimeError):
@@ -29,6 +34,28 @@ class DeepSeekConfigurationError(RuntimeError):
 
 class DeepSeekResponseError(ValueError):
     """DeepSeek 回傳內容無法解析或不符合 Schema。"""
+
+
+def _root_error_message(error: BaseException) -> str:
+    """只擷取驗證器的錯誤原因，不記錄模型回應或原始留言。"""
+    root = error
+    while root.__cause__ is not None:
+        root = root.__cause__
+    return str(root) or root.__class__.__name__
+
+
+def _build_correction_message(error: DeepSeekResponseError) -> str:
+    return f"""
+上一個 JSON 未通過系統驗證。驗證原因：{_root_error_message(error)}
+請保留上一個回應的分析意思，只修正 JSON 結構、必要欄位與留言引用。
+- 頂層只能有 overall_summary、atmosphere、sentiment、topics、top_liked_comments、behavior_insights、conclusions。
+- topics 每項只能有 name、summary、reasoning、evidence_comment_refs。
+- top_liked_comments 每項只能有 comment_ref、interpretation，並必須完整對應輸入的 top_liked_comment_refs。
+- behavior_insights 只能引用 Python 提供的重複或活躍群組；沒有可用群組時輸出 []。
+- behavior_insights 與 conclusions 每項只能有 title、description、evidence_comment_refs。
+- 不可增減、重複或發明 comment_ref，也不可在自然語言欄位中寫入 c1 這類短引用。
+只輸出修正後的完整 JSON object，不要解釋。
+""".strip()
 
 
 SYSTEM_PROMPT = """
@@ -290,31 +317,65 @@ class DeepSeekReportProvider:
 
         if source_label is not None and (not isinstance(source_label, str) or not source_label.strip()):
             raise ValueError("來源標籤必須是非空文字或 None。")
-        response = self._client.chat.completions.create(
-            model=self._model_name,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_report_user_message(validation_criteria)}
-            ],
-            stream=False,
-            response_format={"type": "json_object"},
-            max_tokens=12000,
-            extra_body={"thinking": {"type": "disabled"}},
-        )
-        
-        try:
-            choice = response.choices[0]
-            if choice.finish_reason != "stop" or getattr(choice.message, "refusal", None):
-                raise ValueError("模型回應未正常完成。")
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": build_report_user_message(validation_criteria)},
+        ]
+        usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        usage_fields_seen: set[str] = set()
+
+        for attempt in range(1, REPORT_RESPONSE_MAX_ATTEMPTS + 1):
+            # API 連線錯誤故意不在此重試；只針對已收到、但沒通過驗證的回覆要求修正。
+            response = self._client.chat.completions.create(
+                model=self._model_name,
+                messages=messages,
+                stream=False,
+                response_format={"type": "json_object"},
+                temperature=REPORT_RESPONSE_TEMPERATURE,
+                max_tokens=12000,
+                extra_body={"thinking": {"type": "disabled"}},
+            )
+
+            try:
+                choice = response.choices[0]
+                if choice.finish_reason != "stop" or getattr(choice.message, "refusal", None):
+                    raise ValueError("模型回應未正常完成。")
+                content = choice.message.content
+            except (AttributeError, IndexError, TypeError, ValueError) as error:
+                raise DeepSeekResponseError("DeepSeek 新版回應無效或未完整完成，未建立報告。") from error
+
             usage = getattr(response, "usage", None)
+            for field in usage_totals:
+                value = getattr(usage, field, None)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    usage_totals[field] += value
+                    usage_fields_seen.add(field)
+
             provenance = ReportProvenance(
                 provider_name="deepseek", model_name=getattr(response, "model", None) or self._model_name,
                 prompt_version=REPORT_PROMPT_VERSION, generated_at=datetime.now(UTC).isoformat(),
-                source_label=source_label, prompt_tokens=getattr(usage, "prompt_tokens", None),
-                completion_tokens=getattr(usage, "completion_tokens", None), total_tokens=getattr(usage, "total_tokens", None),
+                source_label=source_label,
+                prompt_tokens=usage_totals["prompt_tokens"] if "prompt_tokens" in usage_fields_seen else None,
+                completion_tokens=(usage_totals["completion_tokens"]
+                                   if "completion_tokens" in usage_fields_seen else None),
+                total_tokens=usage_totals["total_tokens"] if "total_tokens" in usage_fields_seen else None,
             )
 
-            return parse_report_response(choice.message.content, validation_criteria, provenance)
+            try:
+                return parse_report_response(content, validation_criteria, provenance)
+            except DeepSeekResponseError as error:
+                if attempt == REPORT_RESPONSE_MAX_ATTEMPTS:
+                    raise DeepSeekResponseError(
+                        f"DeepSeek 連續 {REPORT_RESPONSE_MAX_ATTEMPTS} 次未依指定報告格式回應，未建立報告。"
+                    ) from error
 
-        except (AttributeError, IndexError, TypeError, ValueError) as error:
-            raise DeepSeekResponseError("DeepSeek 新版回應無效或未完整完成，未建立報告。") from error
+                logger.warning(
+                    "DeepSeek 報告第 %s 次回應未通過驗證，將要求模型修正：%s",
+                    attempt,
+                    _root_error_message(error),
+                )
+                if isinstance(content, str) and content.strip():
+                    messages.append({"role": "assistant", "content": content})
+                messages.append({"role": "user", "content": _build_correction_message(error)})
+
+        raise AssertionError("報告回應重試流程不應執行到此。")

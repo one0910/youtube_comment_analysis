@@ -1,8 +1,9 @@
+import logging
 from collections.abc import Iterator
 from time import sleep
 from urllib.parse import parse_qs, urljoin, urlparse
 
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -90,6 +91,11 @@ COMMENT_SECTION_SCROLL_DISTANCE = 1200
 COMMENT_SECTION_SCROLL_DELAY_SECONDS = 0.5
 COMMENT_BATCH_LOADING_WAIT_SECONDS = 10
 COMMENT_LOADING_MAX_STALLED_ATTEMPTS = 3
+ELEMENT_CLICK_MAX_ATTEMPTS = 3
+ELEMENT_CLICK_RETRY_WAIT_SECONDS = 1
+
+
+logger = logging.getLogger(__name__)
 
 
 YOUTUBE_ORIGIN_URL = "https://www.youtube.com"
@@ -120,6 +126,104 @@ return {
         || Boolean(commentElement.querySelector("#pinned-comment-badge ytw-pinned-comment-badge-renderer")),
 };
 """
+
+ELEMENT_RECEIVES_CLICK_SCRIPT = """
+const targetElement = arguments[0];
+if (!targetElement?.isConnected) {return false}
+
+const targetRectangle = targetElement.getBoundingClientRect();
+if (targetRectangle.width <= 0 || targetRectangle.height <= 0) {return false}
+
+const targetX = Math.min(
+    window.innerWidth - 1,
+    Math.max(0, targetRectangle.left + targetRectangle.width / 2)
+);
+const targetY = Math.min(
+    window.innerHeight - 1,
+    Math.max(0, targetRectangle.top + targetRectangle.height / 2)
+);
+const topElement = document.elementFromPoint(targetX, targetY);
+return topElement === targetElement || targetElement.contains(topElement);
+"""
+
+ELEMENT_CLICK_BLOCKER_SCRIPT = """
+const targetElement = arguments[0];
+const targetRectangle = targetElement.getBoundingClientRect();
+const targetX = Math.min(
+    window.innerWidth - 1,
+    Math.max(0, targetRectangle.left + targetRectangle.width / 2)
+);
+const targetY = Math.min(
+    window.innerHeight - 1,
+    Math.max(0, targetRectangle.top + targetRectangle.height / 2)
+);
+const blockerElement = document.elementFromPoint(targetX, targetY);
+if (!blockerElement) {return null}
+
+return {
+    tag_name: blockerElement.tagName?.toLowerCase() || "",
+    element_id: blockerElement.id || "",
+    class_name: String(blockerElement.className || ""),
+    role: blockerElement.getAttribute("role") || "",
+    aria_label: blockerElement.getAttribute("aria-label") || "",
+};
+"""
+
+
+def _click_element_with_retry(
+    chrome_driver: WebDriver,
+    target_element: WebElement,
+    element_description: str,
+) -> None:
+    """點擊動態頁面元素；被 tooltip 遮擋時等待、重試，最後才使用 JS click。"""
+
+    for attempt_number in range(1, ELEMENT_CLICK_MAX_ATTEMPTS + 1):
+        chrome_driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
+            target_element,
+        )
+
+        try:
+            target_element.click()
+            return
+        except ElementClickInterceptedException:
+            blocker_data = chrome_driver.execute_script(
+                ELEMENT_CLICK_BLOCKER_SCRIPT,
+                target_element,
+            )
+            logger.warning(
+                "Selenium 點擊被其他元素遮擋；element=%s attempt=%s/%s blocker=%s",
+                element_description,
+                attempt_number,
+                ELEMENT_CLICK_MAX_ATTEMPTS,
+                blocker_data,
+            )
+
+            if attempt_number == ELEMENT_CLICK_MAX_ATTEMPTS:
+                logger.warning(
+                    "Selenium 一般點擊持續被遮擋，改用 JavaScript click；element=%s",
+                    element_description,
+                )
+                chrome_driver.execute_script("arguments[0].click();", target_element)
+                return
+
+            try:
+                WebDriverWait(
+                    chrome_driver,
+                    ELEMENT_CLICK_RETRY_WAIT_SECONDS,
+                    poll_frequency=0.1,
+                ).until(
+                    lambda current_driver: bool(
+                        current_driver.execute_script(
+                            ELEMENT_RECEIVES_CLICK_SCRIPT,
+                            target_element,
+                        )
+                    )
+                )
+            except TimeoutException:
+                # YouTube tooltip 可能因滑鼠仍停在按鈕上而持續顯示；進入下一次重試。
+                continue
+
 
 """YouTube 留言元素缺少建立 DTO 所需的必要資料。"""
 class InvalidYouTubeCommentElementError(ValueError):
@@ -302,8 +406,14 @@ def expand_comment_replies(chrome_driver: WebDriver,comment_thread_element: WebE
     if visible_reply_button is None:
         return False
 
-    chrome_driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",visible_reply_button)
-    visible_reply_button.click()
+    _click_element_with_retry(
+        chrome_driver=chrome_driver,
+        target_element=visible_reply_button,
+        element_description=(
+            visible_reply_button.get_attribute("aria-label")
+            or "展開留言回覆"
+        ),
+    )
 
     WebDriverWait(chrome_driver, COMMENT_REPLY_LOADING_WAIT_SECONDS).until(
         lambda _: any(
@@ -337,11 +447,14 @@ def load_remaining_comment_replies(
         if visible_continuation_button is None:
             return
 
-        chrome_driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
-            visible_continuation_button,
+        _click_element_with_retry(
+            chrome_driver=chrome_driver,
+            target_element=visible_continuation_button,
+            element_description=(
+                visible_continuation_button.get_attribute("aria-label")
+                or "載入更多留言回覆"
+            ),
         )
-        visible_continuation_button.click()
 
         WebDriverWait(chrome_driver, COMMENT_REPLY_LOADING_WAIT_SECONDS).until(
             lambda _: len(comment_thread_element.find_elements(By.CSS_SELECTOR, COMMENT_REPLY_ELEMENT_SELECTOR)) > loaded_reply_count

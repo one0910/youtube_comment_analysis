@@ -270,6 +270,7 @@ class DeepSeekReportTests(SimpleTestCase):
         client.chat.completions.create.assert_called_once()
         kwargs = client.chat.completions.create.call_args.kwargs
         self.assertEqual(kwargs["response_format"], {"type": "json_object"})
+        self.assertEqual(kwargs["temperature"], 0)
         self.assertFalse(kwargs["stream"])
         self.assertEqual(kwargs["messages"][0]["content"], SYSTEM_PROMPT)
         self.assertEqual(len(json.loads(kwargs["messages"][1]["content"])["comments"]), 6)
@@ -277,6 +278,46 @@ class DeepSeekReportTests(SimpleTestCase):
         self.assertEqual(report.provenance.prompt_version, REPORT_PROMPT_VERSION)
         self.assertEqual(report.provenance.model_name, "returned-model")
         self.assertEqual(report.provenance.total_tokens, 120)
+
+    def test_invalid_report_is_corrected_once_and_usage_is_accumulated(self):
+        client = self.make_client()
+        invalid_payload = {**self.payload, "unexpected_field": "invalid"}
+        invalid_response = SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(invalid_payload), refusal=None),
+                finish_reason="stop",
+            )],
+            model="returned-model",
+            usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        )
+        valid_response = SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(content=json.dumps(self.payload), refusal=None),
+                finish_reason="stop",
+            )],
+            model="returned-model",
+            usage=SimpleNamespace(prompt_tokens=20, completion_tokens=8, total_tokens=28),
+        )
+        client.chat.completions.create.side_effect = [invalid_response, valid_response]
+
+        report = self.analyze(client)
+
+        self.assertEqual(client.chat.completions.create.call_count, 2)
+        retry_messages = client.chat.completions.create.call_args_list[1].kwargs["messages"]
+        self.assertEqual([message["role"] for message in retry_messages],
+                         ["system", "user", "assistant", "user"])
+        self.assertIn("未通過系統驗證", retry_messages[-1]["content"])
+        self.assertEqual(report.provenance.prompt_tokens, 30)
+        self.assertEqual(report.provenance.completion_tokens, 13)
+        self.assertEqual(report.provenance.total_tokens, 43)
+
+    def test_two_invalid_reports_fail_without_saving_unverified_content(self):
+        client = self.make_client(content='{"unexpected_field": true}')
+
+        with self.assertRaisesRegex(DeepSeekResponseError, "連續 2 次"):
+            self.analyze(client)
+
+        self.assertEqual(client.chat.completions.create.call_count, 2)
 
     def test_missing_usage_is_unknown_not_zero(self):
         self.assertIsNone(self.analyze(self.make_client()).provenance.total_tokens)

@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase,TestCase #TestCase：每個測試之間隔離資料庫資料。
 from django.urls import reverse #reverse()：透過 URL 名稱取得網址。
 from django.db import IntegrityError, transaction
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
 
 from ..forms import NewAnalysisForm
 from ..models import AnalysisJob, AnalysisResult, Comment, CommentSnapshot, FetchRun, Video
@@ -835,6 +835,61 @@ class SeleniumYouTubeCommentReplyExpansionTests(SimpleTestCase):
         visible_reply_button.click.assert_called_once()
         hidden_reply_button.click.assert_not_called()
         chrome_driver.execute_script.assert_called_once()
+
+    @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
+    def test_intercepted_reply_click_is_retried(self, mock_web_driver_wait):
+        """tooltip 暫時遮住回覆按鈕時，應等待後重新點擊。"""
+
+        chrome_driver = MagicMock()
+        comment_thread_element = MagicMock()
+        visible_reply_button = MagicMock()
+        visible_reply_button.is_displayed.return_value = True
+        visible_reply_button.get_attribute.return_value = "1 reply"
+        visible_reply_button.click.side_effect = [
+            ElementClickInterceptedException("模擬 tooltip 遮擋"),
+            None,
+        ]
+        comment_thread_element.find_elements.return_value = [visible_reply_button]
+        mock_web_driver_wait.return_value.until.return_value = True
+
+        replies_expanded = expand_comment_replies(
+            chrome_driver=chrome_driver,
+            comment_thread_element=comment_thread_element,
+        )
+
+        self.assertTrue(replies_expanded)
+        self.assertEqual(visible_reply_button.click.call_count, 2)
+
+    @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
+    def test_repeatedly_intercepted_reply_click_uses_javascript_fallback(self, mock_web_driver_wait):
+        """一般點擊持續被遮住時，最後應使用 JavaScript click。"""
+
+        chrome_driver = MagicMock()
+        comment_thread_element = MagicMock()
+        visible_reply_button = MagicMock()
+        visible_reply_button.is_displayed.return_value = True
+        visible_reply_button.get_attribute.return_value = "1 reply"
+        visible_reply_button.click.side_effect = ElementClickInterceptedException(
+            "模擬 tooltip 持續遮擋"
+        )
+        comment_thread_element.find_elements.return_value = [visible_reply_button]
+        mock_web_driver_wait.return_value.until.side_effect = [
+            TimeoutException("第一次等待遮擋消失逾時"),
+            TimeoutException("第二次等待遮擋消失逾時"),
+            True,
+        ]
+
+        replies_expanded = expand_comment_replies(
+            chrome_driver=chrome_driver,
+            comment_thread_element=comment_thread_element,
+        )
+
+        self.assertTrue(replies_expanded)
+        self.assertEqual(visible_reply_button.click.call_count, 3)
+        chrome_driver.execute_script.assert_any_call(
+            "arguments[0].click();",
+            visible_reply_button,
+        )
 
     @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
     def test_comment_without_reply_button_returns_false(self, mock_web_driver_wait):
