@@ -59,6 +59,7 @@ from ..providers.ai_analysis_request import (
 from ..providers.selenium_youtube_provider import (
     COMMENT_ELEMENT_DATA_SCRIPT,
     VIDEO_COMMENT_THREAD_SELECTOR,
+    _find_visible_comment_sort_options,
     InvalidYouTubeCommentElementError,
     SeleniumYouTubeProvider,
     expand_comment_replies,
@@ -904,8 +905,8 @@ class SeleniumYouTubeCommentReplyExpansionTests(SimpleTestCase):
         mock_web_driver_wait.assert_not_called()
 
     @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
-    def test_reply_loading_timeout_is_not_hidden(self, mock_web_driver_wait):
-        """按鈕存在但回覆載入失敗時應保留逾時錯誤。"""
+    def test_reply_loading_timeout_is_retried_then_skipped(self, mock_web_driver_wait):
+        """單一留言串的回覆持續載入失敗時，應重等一次後略過。"""
 
         comment_thread_element = MagicMock()
         visible_reply_button = MagicMock()
@@ -913,8 +914,14 @@ class SeleniumYouTubeCommentReplyExpansionTests(SimpleTestCase):
         comment_thread_element.find_elements.return_value = [visible_reply_button]
         mock_web_driver_wait.return_value.until.side_effect = TimeoutException("模擬回覆載入逾時")
 
-        with self.assertRaises(TimeoutException):
-            expand_comment_replies(chrome_driver=MagicMock(), comment_thread_element=comment_thread_element)
+        with self.assertLogs("analyses.providers.selenium_youtube_provider", level="WARNING"):
+            replies_expanded = expand_comment_replies(
+                chrome_driver=MagicMock(),
+                comment_thread_element=comment_thread_element,
+            )
+
+        self.assertFalse(replies_expanded)
+        self.assertEqual(mock_web_driver_wait.return_value.until.call_count, 2)
 
 
 """測試 Selenium 持續載入同一則主留言的後續回覆。"""
@@ -966,8 +973,8 @@ class SeleniumYouTubeReplyContinuationTests(SimpleTestCase):
         mock_web_driver_wait.assert_not_called()
 
     @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
-    def test_continuation_loading_timeout_is_not_hidden(self, mock_web_driver_wait):
-        """更多回覆載入失敗時，應保留逾時錯誤供上層處理。"""
+    def test_continuation_loading_timeout_is_retried_then_skipped(self, mock_web_driver_wait):
+        """更多回覆持續載入失敗時，應重等一次並保留已載入內容。"""
 
         visible_continuation_button = MagicMock()
         visible_continuation_button.is_displayed.return_value = True
@@ -975,8 +982,10 @@ class SeleniumYouTubeReplyContinuationTests(SimpleTestCase):
         comment_thread_element.find_elements.side_effect = [[MagicMock()], [visible_continuation_button]]
         mock_web_driver_wait.return_value.until.side_effect = TimeoutException("模擬更多回覆載入逾時")
 
-        with self.assertRaises(TimeoutException):
+        with self.assertLogs("analyses.providers.selenium_youtube_provider", level="WARNING"):
             load_remaining_comment_replies(chrome_driver=MagicMock(), comment_thread_element=comment_thread_element)
+
+        self.assertEqual(mock_web_driver_wait.return_value.until.call_count, 2)
 
 
 """測試 Selenium 逐筆轉換已載入的回覆留言。"""
@@ -1018,6 +1027,31 @@ class SeleniumYouTubeLoadedReplyCommentTests(SimpleTestCase):
 """測試 Selenium 切換 YouTube 留言排序。"""
 class SeleniumYouTubeCommentSortTests(SimpleTestCase):
 
+    def test_newest_sort_waits_until_second_visible_option_exists(self):
+        """選單動畫只顯示第一項時，應繼續等待「最新」選項。"""
+
+        chrome_driver = MagicMock()
+        top_option = MagicMock()
+        newest_option = MagicMock()
+        top_option.is_displayed.return_value = True
+        newest_option.is_displayed.return_value = True
+        chrome_driver.find_elements.side_effect = [
+            [top_option],
+            [top_option, newest_option],
+        ]
+
+        first_result = _find_visible_comment_sort_options(
+            chrome_driver=chrome_driver,
+            target_option_index=1,
+        )
+        second_result = _find_visible_comment_sort_options(
+            chrome_driver=chrome_driver,
+            target_option_index=1,
+        )
+
+        self.assertFalse(first_result)
+        self.assertEqual(second_result, [top_option, newest_option])
+
     @patch("analyses.providers.selenium_youtube_provider.WebDriverWait")
     def test_newest_sort_clicks_second_option(self, mock_web_driver_wait):
         """最新排序應選擇排序選單中的第二個選項。"""
@@ -1056,7 +1090,10 @@ class SeleniumYouTubeCommentSortTests(SimpleTestCase):
     def test_missing_sort_option_raises_timeout(self, mock_web_driver_wait):
         """排序選單缺少預期選項時應回報版面結構錯誤。"""
 
-        mock_web_driver_wait.return_value.until.side_effect = [MagicMock(), [MagicMock()]]
+        mock_web_driver_wait.return_value.until.side_effect = [
+            MagicMock(),
+            TimeoutException("模擬最新排序選項未出現"),
+        ]
 
         with self.assertRaises(TimeoutException):
             select_comment_sort_order(chrome_driver=MagicMock(), sort_order=YouTubeCommentSortOrder.NEWEST)
@@ -1303,6 +1340,25 @@ class FetchRunExecutionServiceTests(TestCase):
         self.assertEqual(self.analysis_job.error_message, "模擬 Selenium 抓取失敗")
         self.assertIsNotNone(self.analysis_job.started_at)
         self.assertIsNotNone(self.analysis_job.completed_at)
+
+    @patch(
+        "analyses.services.fetch_run_execution_service.fetch_and_store_youtube_comments",
+        side_effect=TimeoutException(),
+    )
+    def test_failed_fetch_uses_exception_name_when_message_is_empty(self, mock_fetch_and_store):
+        """Selenium 例外沒有文字時，進度頁仍應顯示可辨識的錯誤。"""
+
+        with self.assertRaises(TimeoutException):
+            execute_youtube_fetch_run(
+                fetch_run=self.fetch_run,
+                youtube_provider=self.youtube_provider,
+                fetch_options=self.fetch_options,
+            )
+
+        self.fetch_run.refresh_from_db()
+        self.analysis_job.refresh_from_db()
+        self.assertEqual(self.fetch_run.error_message, "TimeoutException")
+        self.assertEqual(self.analysis_job.error_message, "TimeoutException")
 
     @patch("analyses.services.fetch_run_execution_service.execute_youtube_fetch_run", return_value=3)
     @patch("analyses.services.fetch_run_execution_service.SeleniumYouTubeProvider")

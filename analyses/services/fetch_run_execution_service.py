@@ -56,7 +56,9 @@ def execute_youtube_fetch_run(
         
     except Exception as error:
         completed_at = timezone.now()
-        error_message = str(error)
+        error_message = str(error).strip()
+        if error_message in {"", "Message:", "Message: None"}:
+            error_message = type(error).__name__
 
         fetch_run.status = FetchRun.Status.FAILED
         fetch_run.completed_at = completed_at

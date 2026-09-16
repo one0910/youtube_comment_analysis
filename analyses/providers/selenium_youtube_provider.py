@@ -91,6 +91,7 @@ COMMENT_SECTION_SCROLL_DISTANCE = 1200
 COMMENT_SECTION_SCROLL_DELAY_SECONDS = 0.5
 COMMENT_BATCH_LOADING_WAIT_SECONDS = 10
 COMMENT_LOADING_MAX_STALLED_ATTEMPTS = 3
+COMMENT_REPLY_LOADING_MAX_ATTEMPTS = 2
 ELEMENT_CLICK_MAX_ATTEMPTS = 3
 ELEMENT_CLICK_RETRY_WAIT_SECONDS = 1
 
@@ -415,17 +416,28 @@ def expand_comment_replies(chrome_driver: WebDriver,comment_thread_element: WebE
         ),
     )
 
-    WebDriverWait(chrome_driver, COMMENT_REPLY_LOADING_WAIT_SECONDS).until(
-        lambda _: any(
-            reply_element.is_displayed()
-            for reply_element in comment_thread_element.find_elements(
-                By.CSS_SELECTOR,
-                COMMENT_REPLY_ELEMENT_SELECTOR,
+    for attempt_number in range(1, COMMENT_REPLY_LOADING_MAX_ATTEMPTS + 1):
+        try:
+            WebDriverWait(chrome_driver, COMMENT_REPLY_LOADING_WAIT_SECONDS).until(
+                lambda _: any(
+                    reply_element.is_displayed()
+                    for reply_element in comment_thread_element.find_elements(
+                        By.CSS_SELECTOR,
+                        COMMENT_REPLY_ELEMENT_SELECTOR,
+                    )
+                )
             )
-        )
-    )
+            return True
+        except TimeoutException:
+            logger.warning(
+                "等待留言回覆載入逾時；reply_button=%s attempt=%s/%s",
+                visible_reply_button.get_attribute("aria-label") or "展開留言回覆",
+                attempt_number,
+                COMMENT_REPLY_LOADING_MAX_ATTEMPTS,
+            )
 
-    return True
+    logger.warning("略過未能載入回覆的留言串，繼續抓取其他留言。")
+    return False
 
 
 """反覆點擊顯示更多回覆，直到全部載入或達到數量上限。"""
@@ -456,9 +468,48 @@ def load_remaining_comment_replies(
             ),
         )
 
-        WebDriverWait(chrome_driver, COMMENT_REPLY_LOADING_WAIT_SECONDS).until(
-            lambda _: len(comment_thread_element.find_elements(By.CSS_SELECTOR, COMMENT_REPLY_ELEMENT_SELECTOR)) > loaded_reply_count
+        for attempt_number in range(1, COMMENT_REPLY_LOADING_MAX_ATTEMPTS + 1):
+            try:
+                WebDriverWait(chrome_driver, COMMENT_REPLY_LOADING_WAIT_SECONDS).until(
+                    lambda _: len(
+                        comment_thread_element.find_elements(
+                            By.CSS_SELECTOR,
+                            COMMENT_REPLY_ELEMENT_SELECTOR,
+                        )
+                    ) > loaded_reply_count
+                )
+                break
+            except TimeoutException:
+                logger.warning(
+                    "等待更多留言回覆載入逾時；loaded_reply_count=%s attempt=%s/%s",
+                    loaded_reply_count,
+                    attempt_number,
+                    COMMENT_REPLY_LOADING_MAX_ATTEMPTS,
+                )
+        else:
+            logger.warning("略過未能繼續載入的回覆，保留已載入內容並繼續抓取其他留言。")
+            return
+
+
+def _find_visible_comment_sort_options(
+    chrome_driver: WebDriver,
+    target_option_index: int,
+) -> list[WebElement] | bool:
+    """等到目標排序選項已呈現，避免選單動畫只先顯示第一個選項。"""
+
+    visible_sort_options = [
+        option
+        for option in chrome_driver.find_elements(
+            By.CSS_SELECTOR,
+            COMMENT_SORT_OPTION_SELECTOR,
         )
+        if option.is_displayed()
+    ]
+    return (
+        visible_sort_options
+        if len(visible_sort_options) > target_option_index
+        else False
+    )
 
 
 """逐筆輸出一則主留言目前已載入的回覆留言。"""
@@ -499,28 +550,36 @@ def select_comment_sort_order(
         "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
         sort_button,
     )
-    sort_button.click()
-
-    visible_sort_options = wait.until(
-        lambda current_driver: [
-            option
-            for option in current_driver.find_elements(By.CSS_SELECTOR, COMMENT_SORT_OPTION_SELECTOR)
-            if option.is_displayed()
-        ] or False
+    target_option_index = COMMENT_SORT_OPTION_INDEX[sort_order]
+    _click_element_with_retry(
+        chrome_driver=chrome_driver,
+        target_element=sort_button,
+        element_description="YouTube 留言排序選單",
     )
 
-    target_option_index = COMMENT_SORT_OPTION_INDEX[sort_order]
-
-    if len(visible_sort_options) <= target_option_index:
-        raise TimeoutException(f"YouTube 留言排序選單缺少索引 {target_option_index}。")
+    visible_sort_options = wait.until(
+        lambda current_driver: _find_visible_comment_sort_options(
+            chrome_driver=current_driver,
+            target_option_index=target_option_index,
+        ),
+        message=f"YouTube 留言排序選單尚未顯示索引 {target_option_index}。",
+    )
 
     target_sort_option = visible_sort_options[target_option_index]
 
     if target_sort_option.get_attribute("aria-selected") == "true":
-        sort_button.click()
+        _click_element_with_retry(
+            chrome_driver=chrome_driver,
+            target_element=sort_button,
+            element_description="關閉 YouTube 留言排序選單",
+        )
         return
 
-    target_sort_option.click()
+    _click_element_with_retry(
+        chrome_driver=chrome_driver,
+        target_element=target_sort_option,
+        element_description=f"YouTube 留言排序選項 {target_option_index}",
+    )
 
     wait.until(
         lambda current_driver: (
