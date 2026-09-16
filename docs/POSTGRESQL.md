@@ -31,10 +31,10 @@ docker compose --profile local-tools up -d redisinsight  # 需要 Redis 圖形�
 另一個終端機啟動 Worker，或使用原本 PyCharm 的 Celery 設定：
 
 ```powershell
-.\.venv\Scripts\python.exe -m celery -A config worker -l info -P solo -Q youtube_selenium,ai_analysis
+.\.venv\Scripts\python.exe -m celery -A config worker -l info -P solo --concurrency=1 -Q youtube_selenium,ai_analysis
 ```
 
-在 Docker 裡執行 Web/Worker 時需另外設定 `POSTGRES_HOST=postgres`。目前 Web/Worker 仍在 Windows 本機執行，預設 `127.0.0.1:5432`。
+使用 Docker Compose 執行 Web／Worker 時，`POSTGRES_HOST` 設為服務名稱 `postgres`；直接在 Windows 本機執行時則使用 `127.0.0.1:5432`。
 
 ## 測試與退回 SQLite
 

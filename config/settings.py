@@ -34,6 +34,17 @@ def get_boolean_environment_variable(name: str, default: bool) -> bool:
     raise ImproperlyConfigured(f"{name} 必須是 true 或 false。")
 
 
+def get_positive_integer_environment_variable(name: str, default: int) -> int:
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise ImproperlyConfigured(f"{name} 必須是正整數。") from error
+    if value < 1:
+        raise ImproperlyConfigured(f"{name} 必須大於 0。")
+    return value
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -51,6 +62,13 @@ ALLOWED_HOSTS = [
     for host in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
     if host.strip()
 ]
+
+# 單次分析抓取的主留言與回覆合計上限。可依部署主機容量調整，
+# t3.micro 預設使用 200，避免 Selenium DOM 與 AI 輸入無限制成長。
+ANALYSIS_MAX_COMMENT_COUNT = get_positive_integer_environment_variable(
+    "ANALYSIS_MAX_COMMENT_COUNT",
+    200,
+)
 
 # 本機大量清理測試資料：允許 Admin 提交不限數量的選取 ID。
 # 正式部署時應恢復有限上限，避免過大的表單耗用資源。

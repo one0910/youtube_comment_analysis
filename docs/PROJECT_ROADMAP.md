@@ -39,7 +39,7 @@ YouTube 網址
     → 使用者主動進入正式 RWD 報告頁
 ```
 
-目前正式資料模型包含 `Video`、`AnalysisJob`、`FetchRun`、`Comment`、`CommentSnapshot` 與 `AnalysisResult`。Web Request 不直接執行 Selenium 或 AI；背景工作分別路由至 `youtube_selenium` 與 `ai_analysis` Queue。開發環境暫以同一個 `solo` Celery Worker 消費兩個 Queue，正式部署前再分離 Worker Process／Container。
+目前正式資料模型包含 `Video`、`AnalysisJob`、`FetchRun`、`Comment`、`CommentSnapshot` 與 `AnalysisResult`。Web Request 不直接執行 Selenium 或 AI；背景工作分別路由至 `youtube_selenium` 與 `ai_analysis` Queue。考量 side project 第一版部署在記憶體有限的 `t3.micro`，開發與正式環境都先由同一個 `solo` Celery Worker 以 `concurrency=1` 消費兩個 Queue，一次只執行一個分析工作；主機升級且出現同時處理需求後，再分離 Worker Process／Container。
 
 目前瀏覽器流程的實際界線：
 
@@ -232,7 +232,7 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 目標：以可替換介面完成 DeepSeek 留言分析、可信來源驗證與頁面 4。
 
 - [x] 選定 DeepSeek 與目前使用模型，API Key 僅由環境變數取得。
-- [ ] 定義正式費用預算、單次輸入上限與大量留言批次策略。
+- [x] 第一版將單次抓取與 AI 輸入限制為主留言及回覆合計 200 則，可由 `ANALYSIS_MAX_COMMENT_COUNT` 依主機容量調整。
 - [x] 定義 Report  Provider 介面與嚴格結構化輸出 Schema。
 - [x] 設計 `AnalysisResult` 模型並建立、審查及套用 migration。
 - [x] 對全量留言建立正規化輸入、Python 精確統計、短引用與 Top 5 排名。
@@ -282,6 +282,7 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 - [ ] 建立 Docker Compose：Nginx、Web、Worker、Redis、PostgreSQL。
 - [x] 使用官方 Selenium Standalone Chromium 容器並固定版本。
 - [x] Selenium 容器設定足夠 shared memory，連接埠只綁定本機介面。
+- [x] 針對 `t3.micro` 採用單一 Gunicorn Worker、單一 Celery Worker，並關閉 Selenium VNC／noVNC及限制 Java Heap。
 - [ ] 分離 development 與 production 設定。
 - [ ] 在本機完成完整容器整合測試。
 - [ ] 規劃 ECR Image 推送流程。
@@ -293,7 +294,7 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 完成條件：
 
 - 新 EC2 可以依文件重建服務。
-- Web、API Worker、Selenium Worker 與 AI Worker 彼此隔離。
+- Web 與單一背景 Worker 彼此隔離；升級主機規格後，再將 Selenium 與 AI Worker 分離擴充。
 - Redis、PostgreSQL 和 Selenium 不直接暴露到公開網路。
 - 更新失敗時有可操作的回復方式。
 

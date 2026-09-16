@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase,TestCase #TestCase：每個測試之間隔離資料庫資料。
+from django.test import SimpleTestCase,TestCase,override_settings #TestCase：每個測試之間隔離資料庫資料。
 from django.urls import reverse #reverse()：透過 URL 名稱取得網址。
 from django.db import IntegrityError, transaction
 from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
@@ -1468,6 +1468,7 @@ class AnalysisJobStartViewTests(TestCase):
         )
 
     @patch("analyses.views.execute_youtube_fetch_run_task.delay")
+    @override_settings(ANALYSIS_MAX_COMMENT_COUNT=200)
     def test_post_creates_job_dispatches_fetch_and_redirects_to_job_page(self, dispatch_fetch):
         """POST 開始分析後，應建立任務並導向任務頁。"""
 
@@ -1476,6 +1477,10 @@ class AnalysisJobStartViewTests(TestCase):
 
         self.assertEqual(AnalysisJob.objects.count(), 1)
         self.assertEqual(created_analysis_job.video,self.video_record)
+        self.assertEqual(
+            created_analysis_job.fetch_runs.get().maximum_comment_count,
+            200,
+        )
         dispatch_fetch.assert_called_once_with(fetch_run_id=str(created_analysis_job.fetch_runs.get().id))
         self.assertRedirects(
             response,

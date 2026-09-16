@@ -123,7 +123,7 @@ python manage.py migrate
 
 ```powershell
 docker compose up -d postgres redis
-celery -A config worker -l info -P solo -Q youtube_selenium,ai_analysis
+celery -A config worker -l info -P solo --concurrency=1 -Q youtube_selenium,ai_analysis
 ```
 
 另一個 PowerShell 視窗：

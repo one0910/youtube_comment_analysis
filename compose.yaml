@@ -20,7 +20,7 @@ services:
     command:
       - sh
       - -c
-      - python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120
+      - python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --timeout 120
     ports:
       - "127.0.0.1:8100:8000"
     depends_on:
@@ -54,7 +54,7 @@ services:
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-    command: ["celery", "-A", "config", "worker", "-l", "info", "-P", "solo", "-Q", "youtube_selenium,ai_analysis"]
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-P", "solo", "--concurrency=1", "-Q", "youtube_selenium,ai_analysis"]
     depends_on:
       web:
         condition: service_healthy
@@ -72,6 +72,9 @@ services:
     environment:
       SE_NODE_MAX_SESSIONS: "1"
       SE_NODE_SESSION_TIMEOUT: "180"
+      SE_START_VNC: "false"
+      SE_START_NO_VNC: "false"
+      SE_JAVA_OPTS: "-Xms64m -Xmx256m"
     ports:
       - "127.0.0.1:4444:4444"
     healthcheck:
