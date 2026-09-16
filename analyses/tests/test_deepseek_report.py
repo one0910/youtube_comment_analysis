@@ -10,7 +10,7 @@ from ..providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from ..providers.ai_report import ReportProvenance, ReportVideo
 from ..providers.deepseek_report_provider import (
     DeepSeekConfigurationError, DeepSeekReportProvider, DeepSeekResponseError,
-    REPORT_PROMPT_VERSION, SYSTEM_PROMPT,
+    REPORT_PROMPT_VERSION, REPORT_RESPONSE_MAX_ATTEMPTS, SYSTEM_PROMPT,
     build_report_user_message, parse_report_response,
 )
 from ..services.ai_report_preparation_service import create_validation_criteria
@@ -307,17 +307,21 @@ class DeepSeekReportTests(SimpleTestCase):
         self.assertEqual([message["role"] for message in retry_messages],
                          ["system", "user", "assistant", "user"])
         self.assertIn("未通過系統驗證", retry_messages[-1]["content"])
+        self.assertIn("behavior_insights 必須輸出 []", retry_messages[-1]["content"])
         self.assertEqual(report.provenance.prompt_tokens, 30)
         self.assertEqual(report.provenance.completion_tokens, 13)
         self.assertEqual(report.provenance.total_tokens, 43)
 
-    def test_two_invalid_reports_fail_without_saving_unverified_content(self):
+    def test_maximum_invalid_reports_fail_without_saving_unverified_content(self):
         client = self.make_client(content='{"unexpected_field": true}')
 
-        with self.assertRaisesRegex(DeepSeekResponseError, "連續 2 次"):
+        with self.assertRaisesRegex(
+            DeepSeekResponseError,
+            f"連續 {REPORT_RESPONSE_MAX_ATTEMPTS} 次",
+        ):
             self.analyze(client)
 
-        self.assertEqual(client.chat.completions.create.call_count, 2)
+        self.assertEqual(client.chat.completions.create.call_count, REPORT_RESPONSE_MAX_ATTEMPTS)
 
     def test_missing_usage_is_unknown_not_zero(self):
         self.assertIsNone(self.analyze(self.make_client()).provenance.total_tokens)

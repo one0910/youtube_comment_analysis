@@ -21,8 +21,8 @@ from analyses.services.ai_report_preparation_service import (
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
-REPORT_PROMPT_VERSION = "comment-analysis-v8"
-REPORT_RESPONSE_MAX_ATTEMPTS = 2
+REPORT_PROMPT_VERSION = "comment-analysis-v9"
+REPORT_RESPONSE_MAX_ATTEMPTS = 3
 REPORT_RESPONSE_TEMPERATURE = 0
 
 logger = logging.getLogger(__name__)
@@ -44,14 +44,35 @@ def _root_error_message(error: BaseException) -> str:
     return str(root) or root.__class__.__name__
 
 
-def _build_correction_message(error: DeepSeekResponseError) -> str:
+def _build_correction_message(error: DeepSeekResponseError, facts: PreparedReportFacts) -> str:
+    id_to_ref = {comment.youtube_comment_id: f"c{index}"
+                 for index, comment in enumerate(facts.request.comments, 1)}
+    behavior_comment_ids = {
+        comment_id
+        for group in (*facts.repeated_text_groups, *facts.display_name_activity)
+        for comment_id in group.comment_ids
+    }
+    allowed_behavior_refs = [
+        id_to_ref[comment.youtube_comment_id]
+        for comment in facts.request.comments
+        if comment.youtube_comment_id in behavior_comment_ids
+    ]
+    if allowed_behavior_refs:
+        behavior_rule = (
+            "behavior_insights.evidence_comment_refs 只允許使用這個清單內的值："
+            f"{json.dumps(allowed_behavior_refs, ensure_ascii=False)}。"
+            "若無法從這些引用得出有依據的觀察，就輸出 []。"
+        )
+    else:
+        behavior_rule = "本次沒有允許的行為群組引用，behavior_insights 必須輸出 []。"
+
     return f"""
 上一個 JSON 未通過系統驗證。驗證原因：{_root_error_message(error)}
 請保留上一個回應的分析意思，只修正 JSON 結構、必要欄位與留言引用。
 - 頂層只能有 overall_summary、atmosphere、sentiment、topics、top_liked_comments、behavior_insights、conclusions。
 - topics 每項只能有 name、summary、reasoning、evidence_comment_refs。
 - top_liked_comments 每項只能有 comment_ref、interpretation，並必須完整對應輸入的 top_liked_comment_refs。
-- behavior_insights 只能引用 Python 提供的重複或活躍群組；沒有可用群組時輸出 []。
+- {behavior_rule}
 - behavior_insights 與 conclusions 每項只能有 title、description、evidence_comment_refs。
 - 不可增減、重複或發明 comment_ref，也不可在自然語言欄位中寫入 c1 這類短引用。
 只輸出修正後的完整 JSON object，不要解釋。
@@ -376,6 +397,9 @@ class DeepSeekReportProvider:
                 )
                 if isinstance(content, str) and content.strip():
                     messages.append({"role": "assistant", "content": content})
-                messages.append({"role": "user", "content": _build_correction_message(error)})
+                messages.append({
+                    "role": "user",
+                    "content": _build_correction_message(error, validation_criteria),
+                })
 
         raise AssertionError("報告回應重試流程不應執行到此。")
