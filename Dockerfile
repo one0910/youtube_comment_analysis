@@ -1,3 +1,14 @@
+FROM node:22-alpine AS frontend-builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run css:build
+
+
 FROM python:3.13-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -13,6 +24,7 @@ RUN addgroup --system tubesense \
     && adduser --system --ingroup tubesense tubesense
 
 COPY --chown=tubesense:tubesense . .
+COPY --from=frontend-builder --chown=tubesense:tubesense /app/static/css/app.css /app/static/css/app.css
 RUN mkdir -p /app/staticfiles \
     && chown tubesense:tubesense /app/staticfiles
 
