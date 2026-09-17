@@ -1,6 +1,6 @@
 """將已驗證的 報告整理成畫面所需的 context。"""
 
-from .ai_report_preparation_service import (
+from .report_preparation import (
     apply_report_sample_scope,
     replace_report_comment_refs_with_author_names,
     validate_report_source_facts,

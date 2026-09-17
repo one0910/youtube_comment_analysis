@@ -37,7 +37,7 @@ def fetch_and_store_youtube_comments(
         for single_comment_data in comment_datas:
             _validate_comment_video(video_record=video_record,comment_data=single_comment_data)
 
-            # Selenium 捲動時可能重複讀到同一個 DOM 留言，
+            # Provider 可能因捲動或分頁邊界重複回傳同一則留言，
             # 同一次抓取只保存第一次出現的資料。
             if (single_comment_data.youtube_comment_id in processed_youtube_comment_ids):
                 continue
@@ -76,7 +76,7 @@ def fetch_and_store_youtube_comments(
 
     return len(processed_youtube_comment_ids)
 
-"""讓進度頁能在 Selenium 抓取期間讀到最新留言數。"""
+"""讓進度頁能在 Provider 抓取期間讀到最新留言數。"""
 def _update_fetched_comment(fetch_run: FetchRun, fetched_comment_count: int) -> None:
     
     fetch_run.fetched_comment_count = fetched_comment_count

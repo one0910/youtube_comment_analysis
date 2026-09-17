@@ -10,10 +10,10 @@ from django.utils import timezone
 from analyses.models import AnalysisJob, AnalysisResult, FetchRun
 from analyses.providers.ai_analysis_request import AIAnalysisRequest
 from analyses.providers.ai_report import AIReport, REPORT_SCHEMA_VERSION, ReportVideo
-from analyses.providers.deepseek_report_provider import DeepSeekReportProvider
+from analyses.providers.ai.deepseek_report_provider import DeepSeekReportProvider
 
-from .ai_analysis_request_service import build_ai_analysis_request_from_fetch_run
-from .ai_report_preparation_service import create_validation_criteria, validate_report_source_facts
+from .analysis_request import build_ai_analysis_request_from_fetch_run
+from .report_preparation import create_validation_criteria, validate_report_source_facts
 
 
 class ReportProvider(Protocol):

@@ -2,20 +2,19 @@ from uuid import UUID
 from django.utils import timezone
 
 from analyses.models import AnalysisJob, FetchRun
-from analyses.providers.selenium_youtube_provider import SeleniumYouTubeProvider
 from analyses.providers.youtube_provider import (
     YouTubeCommentFetchOptions,
     YouTubeCommentSortOrder,
     YouTubeProvider,
 )
+from .provider_factory import (
+    YouTubeProviderUnavailableError,
+    create_youtube_provider,
+)
 
-from .youtube_fetch_service import fetch_and_store_youtube_comments
+from .comment_fetch import fetch_and_store_youtube_comments
 
-"""FetchRun 指定的 YouTube Provider 目前無法使用。"""
-class YouTubeProviderUnavailableError(ValueError):
-
-
-  """執行一次留言抓取，並保存任務的成功或失敗狀態。"""
+"""執行一次留言抓取，並保存任務的成功或失敗狀態。"""
 def execute_youtube_fetch_run(
     fetch_run: FetchRun,
     youtube_provider: YouTubeProvider,
@@ -105,12 +104,7 @@ def execute_youtube_fetch_run_by_id(
             maximum_comment_count=fetch_run.maximum_comment_count,
         )
 
-    if fetch_run.data_source == AnalysisJob.DataSource.SELENIUM:
-        youtube_provider = SeleniumYouTubeProvider()
-    elif fetch_run.data_source == AnalysisJob.DataSource.YOUTUBE_API:
-        raise YouTubeProviderUnavailableError("YouTube API Provider 尚未實作。")
-    else:
-        raise YouTubeProviderUnavailableError(f"不支援的 YouTube 資料來源：{fetch_run.data_source}")
+    youtube_provider = create_youtube_provider(fetch_run.data_source)
 
     return execute_youtube_fetch_run(
         fetch_run=fetch_run,

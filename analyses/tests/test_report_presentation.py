@@ -6,7 +6,7 @@ from django.shortcuts import render
 from django.urls import NoReverseMatch, include, path, reverse
 
 from .. import urls as analyses_urls
-from ..services.report_presentation_service import build_report_context
+from ..services.ai.report_presentation import build_report_context
 from .report_factory import build_report_test_fixture
 
 
@@ -28,7 +28,7 @@ class ReportPresentationTests(SimpleTestCase):
     def setUp(self):
         self.url = reverse("analyses:analysis_report_detail")
 
-    @patch("analyses.providers.deepseek_report_provider.DeepSeekReportProvider.analyze_report")
+    @patch("analyses.providers.ai.deepseek_report_provider.DeepSeekReportProvider.analyze_report")
     def test_report_template_uses_fixture_without_api_or_database(self, analyze):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)

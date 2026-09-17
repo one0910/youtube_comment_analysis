@@ -1,7 +1,7 @@
 from celery import shared_task
 
-from .services.fetch_run_execution_service import execute_youtube_fetch_run_by_id
-from .services.ai_report_execution_service import execute_report_analysis, mark_report_dispatch_failed
+from .services.youtube.fetch_run_execution import execute_youtube_fetch_run_by_id
+from .services.ai.report_execution import execute_report_analysis, mark_report_dispatch_failed
 
 
 #@shared_task 是裝飾器。它把你定義的函式註冊、包裝成 Celery 任務，並透過 Celery 的任務物件提供

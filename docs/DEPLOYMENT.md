@@ -12,7 +12,9 @@ cp .env.production.example .env.production
 chmod 600 .env.postgres .env.production
 ```
 
-請設定強密碼、隨機 `DJANGO_SECRET_KEY`、EC2 公開 IP 或 Domain，以及 DeepSeek API Key。`DJANGO_ALLOWED_HOSTS` 使用逗號分隔且不包含 `http://`。
+請設定強密碼、隨機 `DJANGO_SECRET_KEY`、EC2 公開 IP 或 Domain、DeepSeek API Key，以及已啟用 YouTube Data API v3 的 `YOUTUBE_API_KEY`。`DJANGO_ALLOWED_HOSTS` 使用逗號分隔且不包含 `http://`。
+
+正式環境應保持 `YOUTUBE_DATA_SOURCE=youtube_api`；本機開發未設定時則預設使用 Selenium。API Key 只放在 `.env.production`，不可提交 Git。
 
 可用下列命令產生足夠長的 Django Secret Key：
 
@@ -24,18 +26,18 @@ python3 -c "import secrets; print(secrets.token_urlsafe(50))"
 
 ```bash
 docker compose -f compose.production.yaml config
-docker compose -f compose.production.yaml up -d --build
+docker compose -f compose.production.yaml up -d --build --remove-orphans
 docker compose -f compose.production.yaml ps
 ```
 
-正式 Compose 只公開 Nginx 的 TCP 80。Django、PostgreSQL、Redis 與 Selenium 都只存在於 Docker 內部網路。
+正式 Compose 只公開 Nginx 的 TCP 80。Django、PostgreSQL 與 Redis 都只存在於 Docker 內部網路；正式環境使用 YouTube Data API，不啟動 Selenium 容器。
 
 AWS Security Group 第一版只需開放：
 
 - TCP 80：網站 HTTP。
 - TCP 22：若確實使用 SSH，來源限制為自己的 IP；使用 SSM 時可不公開 SSH。
 
-不要公開 5432、6379、4444 或 8000。
+不要公開 5432、6379 或 8000。
 
 ## 3. 驗證
 
@@ -43,14 +45,13 @@ AWS Security Group 第一版只需開放：
 curl -I http://127.0.0.1/
 docker compose -f compose.production.yaml logs --tail 100 web
 docker compose -f compose.production.yaml logs --tail 100 worker
-docker compose -f compose.production.yaml logs --tail 100 selenium
 docker stats --no-stream
 free -h
 ```
 
 再從瀏覽器建立一筆分析，確認留言抓取、AI 分析與報告頁完整成功。
 
-本機完整啟動驗證的閒置基線約為 454 MiB；Selenium 載入 YouTube 後才是記憶體高峰。`t3.micro` 必須保留 2 GiB Swap，且第一版維持 200 則留言上限與一次一項任務。
+正式環境已移除 Selenium 容器的常駐記憶體成本。`t3.micro` 仍保留 2 GiB Swap，且第一版維持 200 則留言上限與一次一項任務。
 
 ## 4. 日常操作
 
@@ -74,6 +75,6 @@ df -h
 docker system df
 ```
 
-若經常用滿 2 GiB Swap、出現 OOM，或 Selenium 頻繁逾時，應先將 `ANALYSIS_MAX_COMMENT_COUNT` 降低，再評估升級主機規格。
+若經常用滿 2 GiB Swap 或出現 OOM，應先將 `ANALYSIS_MAX_COMMENT_COUNT` 降低，再評估升級主機規格。若 API 回覆 `quotaExceeded`，請到 Google Cloud Console 檢查 YouTube Data API 配額。
 
 HTTPS、Domain、憑證自動續期與正式安全 Header 會在下一階段加入。

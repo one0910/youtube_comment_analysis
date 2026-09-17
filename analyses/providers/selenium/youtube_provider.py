@@ -10,13 +10,13 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from analyses.services.youtube_count_parser import (
+from .count_parser import (
     InvalidYouTubeCountTextError,
     convert_youtube_count_text_to_integer,
 )
 
-from .selenium_driver_factory import create_local_chrome_driver
-from .youtube_provider import (
+from .driver_factory import create_local_chrome_driver
+from ..youtube_provider import (
     YouTubeCommentData,
     YouTubeCommentFetchOptions,
     YouTubeCommentSortOrder,

@@ -4,8 +4,8 @@ import json
 
 from analyses.providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from analyses.providers.ai_report import ReportProvenance, ReportVideo
-from analyses.providers.deepseek_report_provider import parse_report_response
-from analyses.services.ai_report_preparation_service import create_validation_criteria
+from analyses.providers.ai.deepseek_report_provider import parse_report_response
+from analyses.services.ai.report_preparation import create_validation_criteria
 
 
 def build_report_test_fixture(*, small: bool = False):

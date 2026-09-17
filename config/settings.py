@@ -70,6 +70,16 @@ ANALYSIS_MAX_COMMENT_COUNT = get_positive_integer_environment_variable(
     200,
 )
 
+# 本機預設保留 Selenium；正式環境改用 YouTube Data API，
+# 避免雲端資料中心 IP 觸發 YouTube 機器人驗證。
+YOUTUBE_DATA_SOURCE = os.getenv("YOUTUBE_DATA_SOURCE", "selenium").strip().lower()
+if YOUTUBE_DATA_SOURCE not in {"selenium", "youtube_api"}:
+    raise ImproperlyConfigured("YOUTUBE_DATA_SOURCE 必須是 selenium 或 youtube_api。")
+
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+if YOUTUBE_DATA_SOURCE == "youtube_api" and not YOUTUBE_API_KEY:
+    raise ImproperlyConfigured("使用 YouTube API 時必須設定 YOUTUBE_API_KEY。")
+
 # 本機大量清理測試資料：允許 Admin 提交不限數量的選取 ID。
 # 正式部署時應恢復有限上限，避免過大的表單耗用資源。
 DATA_UPLOAD_MAX_NUMBER_FIELDS = None

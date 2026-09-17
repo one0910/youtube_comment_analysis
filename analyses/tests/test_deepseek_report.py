@@ -8,12 +8,12 @@ from django.test import SimpleTestCase
 
 from ..providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from ..providers.ai_report import ReportProvenance, ReportVideo
-from ..providers.deepseek_report_provider import (
+from ..providers.ai.deepseek_report_provider import (
     DeepSeekConfigurationError, DeepSeekReportProvider, DeepSeekResponseError,
     REPORT_PROMPT_VERSION, REPORT_RESPONSE_MAX_ATTEMPTS, SYSTEM_PROMPT,
     build_report_user_message, parse_report_response,
 )
-from ..services.ai_report_preparation_service import create_validation_criteria
+from ..services.ai.report_preparation import create_validation_criteria
 
 
 class DeepSeekReportTests(SimpleTestCase):

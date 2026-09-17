@@ -2,7 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from .services.youtube_url_parser import (
+from .services.youtube.url_parser import (
     InvalidYouTubeUrlError,
     get_video_id_from_youtube_url,
 )

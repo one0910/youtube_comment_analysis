@@ -20,7 +20,7 @@
 | 欄位 | 型別 | 產生者／用途 |
 | --- | --- | --- |
 | schema_version | 固定字串 | Python；辨識格式 |
-| video | ReportVideo | Selenium Preview 快照；影片資訊卡 |
+| video | ReportVideo | YouTube Provider Preview 快照；影片資訊卡 |
 | sample | ReportSample | Python；有效去重且實際送入 AI 的筆數、模式、抓取設定 |
 | overall_summary | 文字 | AI；整體摘要 |
 | atmosphere | 文字 | AI；整體氛圍，小樣本也保留 |
@@ -98,9 +98,9 @@ small 時整個 `sentiment` 必須是 `null`，改顯示 `atmosphere`。
 指定 Top 5 的解讀、行為解讀與核心總結。風險、建議與限制不再要求模型輸出。
 API 中議題／洞察以 `evidence_comment_refs` 引用；Top 5 解讀用 `comment_ref`＋`interpretation`。
 不要求模型計算樣本數、挑選排名、計算重複次數、產出 Preview 或 HTML。
-已實作於 `analyses/providers/deepseek_report_provider.py`：
+已實作於 `analyses/providers/ai/deepseek_report_provider.py`：
 
-- `SYSTEM_PROMPT`：新版系統提示；`REPORT_PROMPT_VERSION = comment-analysis-v7`。
+- `SYSTEM_PROMPT`：新版系統提示；`REPORT_PROMPT_VERSION = comment-analysis-v9`。
   提示詞版本與報告格式 `comment-analysis-result` 是不同的版本軸。
 - `build_report_user_message(facts)`：全量留言、Preview、精確統計與額外 Top 5／行為群組，
   全部留言依輸入順序使用 c1、c2 等短引用；排名不影響整體分析範圍。
@@ -117,7 +117,7 @@ API 中議題／洞察以 `evidence_comment_refs` 引用；Top 5 解讀用 `comm
   不自動重試產生報告，避免解析失敗後悄悄重複付費。網路錯誤向上拋出。
 - 回應 finish_reason 必須是 stop；截斷、拒絕或空回應不建立報告。
   未取得 Token 數使用 null，不偽裝成 0。版本、時間與影片統計由 Python 記錄。
-- 回傳 `AIReport`，由 `ai_report_execution_service.py` 驗證後寫入 `AnalysisResult`。
+- 回傳 `AIReport`，由 `services/ai/report_execution.py` 驗證後寫入 `AnalysisResult`。
 
 JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因此保留嚴格的 Python 驗證。
 參考 [DeepSeek 官方 JSON Output 說明](https://api-docs.deepseek.com/guides/json_mode/)。
@@ -128,7 +128,7 @@ JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因�
 清單格式、重複 ID、Top 5 排序／上限、時間格式。`asdict()` 可序列化成 JSON。
 這不是完整 JSON parser；不能直接以巢狀 dict 呼叫 `AIReport(**payload)`。
 
-已實作：`analyses/services/ai_report_preparation_service.py`。
+已實作：`analyses/services/ai/report_preparation.py`。
 
 - `create_validation_criteria(request, video, sort_order=..., include_replies=...)` 接受已驗證去重的
   `AIAnalysisRequest` 及 `ReportVideo`，不讀寫 DB、不呼叫 API、不裁切或修改來源留言。
@@ -145,8 +145,8 @@ JSON mode 本身不足以驗證本專案的欄位、引用與來源事實，因�
 正式流程已接入：
 
 1. `FetchRun` 永久保存排序方式、是否包含回覆與留言數量上限。
-2. Selenium Task 成功後排入 `ai_analysis` Queue，由 `DeepSeekReportProvider` 產生報告。
-3. `ai_report_execution_service.py` 重算來源事實、驗證報告並以
+2. YouTube 留言抓取 Task 成功後排入 `ai_analysis` Queue，由 `DeepSeekReportProvider` 產生報告。
+3. `services/ai/report_execution.py` 重算來源事實、驗證報告並以
    `comment-analysis-result` 寫入 `AnalysisResult`；未知 Token 保存為 null。
 4. 進度頁每兩秒以 HTMX 更新；任務完成後導向
    `/analyses/jobs/<analysis-job-id>/report/`，由資料庫還原並再次驗證報告。
@@ -170,7 +170,7 @@ python manage.py test analyses -v 1
 
 - 正式流程只透過 `/analyses/jobs/<analysis-job-id>/report/` 顯示已完成並經來源驗證的報告。
 - 開發階段使用的模擬與真實成品預覽 URL 已移除，不再暴露額外報告入口。
-- `report_presentation_service.py` 只負責將已驗證的報告轉成畫面所需的 context。
+- `services/ai/report_presentation.py` 只負責將已驗證的報告轉成畫面所需的 context。
 - 模擬資料位於 `analyses/tests/report_factory.py`，僅供離線測試使用，不對外提供路由。
 - `report.html` 使用專案既有的 Tailwind v4 bundle 與現有 base/sidebar；已移除獨立的
   `report.css`，避免維護兩套設計系統。沒有引入 Stitch 的 CDN Tailwind、固定頁面高度、
@@ -181,4 +181,4 @@ python manage.py test analyses -v 1
   高讚表格採緊湊單行並移除解讀展開，過長原文保留於可獨立橫向捲動的表格中。
   只調整顯示，資料格式中的 interpretation 仍保留，其他區塊待真實資料接入後再調整。
 - 缺少的影片縮圖、發布時間及片長以未知狀態呈現，不自行補值。
-- `report_artifact_service.py` 僅負責將資料庫內的 JSON 還原為嚴格 DTO，並拒絕未知或遭竄改的衍生欄位。
+- `services/ai/report_artifact.py` 僅負責將資料庫內的 JSON 還原為嚴格 DTO，並拒絕未知或遭竄改的衍生欄位。

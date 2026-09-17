@@ -7,12 +7,12 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
-from .ai_analysis_request import AIAnalysisRequest
-from .ai_report import (
+from ..ai_analysis_request import AIAnalysisRequest
+from ..ai_report import (
     AIReport, ReportInsight, ReportProvenance, ReportTopic, ReportVideo,
     SentimentCategory, SentimentEstimate, TopLikedComment,
 )
-from analyses.services.ai_report_preparation_service import (
+from analyses.services.ai.report_preparation import (
     PreparedReportFacts, apply_report_sample_scope, create_validation_criteria,
     replace_report_comment_refs_with_author_names,
     validate_report_source_facts,

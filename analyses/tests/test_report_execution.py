@@ -11,11 +11,11 @@ from django.urls import reverse
 
 from ..models import AnalysisJob, AnalysisResult, Comment, CommentSnapshot, FetchRun, Video
 from ..providers import ai_report as report_types
-from ..services.ai_report_preparation_service import create_validation_criteria
+from ..services.ai.report_preparation import create_validation_criteria
 from ..services.analysis_job_creation_service import create_pending_analysis_job_for_video
-from ..services.report_artifact_service import load_report_payload
-from ..services.ai_report_execution_service import execute_report_analysis
-from ..services.report_result_service import ReportUnavailableError, load_report_from_result
+from ..services.ai.report_artifact import load_report_payload
+from ..services.ai.report_execution import execute_report_analysis
+from ..services.ai.report_result import ReportUnavailableError, load_report_from_result
 
 
 class FakeReportProvider:
@@ -121,7 +121,7 @@ class ReportExecutionServiceTests(TestCase):
     def test_string_id_uses_default_provider(self):
         provider = FakeReportProvider()
         with patch(
-            "analyses.services.ai_report_execution_service.DeepSeekReportProvider",
+            "analyses.services.ai.report_execution.DeepSeekReportProvider",
             return_value=provider,
         ) as provider_factory:
             result = execute_report_analysis(fetch_run_id=str(self.fetch_run.id))

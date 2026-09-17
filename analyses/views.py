@@ -16,10 +16,10 @@ from .models import AnalysisJob, Video
 from .services.analysis_job_creation_service import (
     create_pending_analysis_job_for_video,
 )
-from .services.youtube_video_preview_service import (
-    get_video_preview_with_selenium,
+from .services.youtube.video_preview import (
+    get_youtube_video_preview,
 )
-from .services.youtube_video_storage_service import (
+from .services.youtube.video_storage import (
     save_or_update_video_from_preview_data,
 )
 from .services.analysis_job_progress_service import build_analysis_stage_presentations
@@ -27,8 +27,9 @@ from .providers.youtube_provider import (
     YouTubeCommentFetchOptions,
     YouTubeVideoUnavailableError,
 )
-from .services.report_presentation_service import build_report_context
-from .services.report_result_service import ReportUnavailableError, load_latest_report_for_job
+from .providers.youtube_data_api.youtube_provider import YouTubeDataAPIError
+from .services.ai.report_presentation import build_report_context
+from .services.ai.report_result import ReportUnavailableError, load_latest_report_for_job
 from .tasks import execute_youtube_fetch_run_task
 
 
@@ -79,9 +80,9 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
         validated_input_video_url = form.cleaned_data["input_video_url"]
         youtube_video_id = form.cleaned_data["youtube_video_id"]
         try:
-            video_preview_data = get_video_preview_with_selenium(youtube_video_id=youtube_video_id)
+            video_preview_data = get_youtube_video_preview(youtube_video_id=youtube_video_id)
 
-            # Selenium 成功取得影片資料後，將影片新增或更新到 Video 資料表。
+            # Provider 成功取得影片資料後，將影片新增或更新到 Video 資料表。
             saved_video_record = save_or_update_video_from_preview_data(video_preview_data=video_preview_data)
 
         except YouTubeVideoUnavailableError:
@@ -94,6 +95,20 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
                 "error_message": _(
                     "無法取得這部影片的公開資訊。"
                     "請確認網址正確，且影片為公開、可觀看狀態。"
+                ),
+            }
+        except YouTubeDataAPIError as error:
+            logger.warning(
+                "YouTube Data API 無法取得影片預覽；reason=%s",
+                error.reason,
+            )
+            form.add_error("input_video_url", _("YouTube 服務目前無法回應，請稍後再試。"))
+            video_preview_error = {
+                "error_code": "youtube_provider_error",
+                "error_title": _("YouTube 服務暫時無法使用"),
+                "error_message": _(
+                    "目前無法取得 YouTube 影片資料。"
+                    "請稍後重試；若問題持續，請檢查 API 配額與設定。"
                 ),
             }
 
@@ -120,8 +135,9 @@ def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
     # 然後將透過preview影片來建立一個等待處理的分析任務。
     created_analysis_job = create_pending_analysis_job_for_video(
         video_record=video_record,
+        data_source=settings.YOUTUBE_DATA_SOURCE,
         fetch_options=YouTubeCommentFetchOptions(
-            maximum_comment_count=settings.ANALYSIS_MAX_COMMENT_COUNT,
+            maximum_comment_count=None,
         ),
     )
     # created_analysis_job.fetch_run可以取得AnalysisJob的資料。透過反向關聯，找出剛才建立的第一次 FetchRun

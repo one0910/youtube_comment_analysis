@@ -1,12 +1,12 @@
 from unittest import TestCase
 from unittest.mock import patch
 
-from analyses.providers.selenium_driver_factory import create_local_chrome_driver
+from analyses.providers.selenium.driver_factory import create_local_chrome_driver
 
 
 class SeleniumDriverFactoryTests(TestCase):
     @patch.dict("os.environ", {}, clear=True)
-    @patch("analyses.providers.selenium_driver_factory.webdriver.Chrome")
+    @patch("analyses.providers.selenium.driver_factory.webdriver.Chrome")
     def test_uses_local_chrome_without_remote_url(self, mock_chrome):
         driver = create_local_chrome_driver()
 
@@ -15,7 +15,7 @@ class SeleniumDriverFactoryTests(TestCase):
         driver.set_page_load_timeout.assert_called_once_with(30)
 
     @patch.dict("os.environ", {"SELENIUM_REMOTE_URL": "http://selenium:4444/wd/hub"}, clear=True)
-    @patch("analyses.providers.selenium_driver_factory.webdriver.Remote")
+    @patch("analyses.providers.selenium.driver_factory.webdriver.Remote")
     def test_uses_remote_chrome_when_remote_url_is_configured(self, mock_remote):
         driver = create_local_chrome_driver()
 

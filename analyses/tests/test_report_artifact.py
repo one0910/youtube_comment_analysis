@@ -6,7 +6,7 @@ import json
 
 from django.test import SimpleTestCase
 
-from ..services.report_artifact_service import load_report_payload
+from ..services.ai.report_artifact import load_report_payload
 from .report_factory import build_report_test_fixture
 
 

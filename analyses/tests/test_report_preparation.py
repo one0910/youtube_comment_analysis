@@ -4,7 +4,7 @@ from django.test import SimpleTestCase
 
 from ..providers.ai_analysis_request import AIAnalysisRequest, AICommentInput
 from ..providers import ai_report as report_types
-from ..services.ai_report_preparation_service import create_validation_criteria, validate_report_source_facts
+from ..services.ai.report_preparation import create_validation_criteria, validate_report_source_facts
 
 
 def comment(comment_id, likes=0, *, sequence=1, author="@demo", text="測試留言", parent=None):
