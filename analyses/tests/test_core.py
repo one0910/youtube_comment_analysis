@@ -1508,15 +1508,26 @@ class AnalysisJobStartViewTests(TestCase):
         self.assertEqual(created_analysis_job.video,self.video_record)
         self.assertEqual(created_analysis_job.data_source, AnalysisJob.DataSource.YOUTUBE_API)
         self.assertEqual(created_analysis_job.fetch_runs.get().data_source, AnalysisJob.DataSource.YOUTUBE_API)
-        self.assertEqual(
-            created_analysis_job.fetch_runs.get().maximum_comment_count,
-            200,
-        )
+        self.assertIsNone(created_analysis_job.fetch_runs.get().maximum_comment_count)
         dispatch_fetch.assert_called_once_with(fetch_run_id=str(created_analysis_job.fetch_runs.get().id))
         self.assertRedirects(
             response,
             reverse("analyses:analysis_job_detail",args=[created_analysis_job.id]),
         )
+
+    @patch("analyses.views.execute_youtube_fetch_run_task.delay")
+    @override_settings(
+        ANALYSIS_MAX_COMMENT_COUNT=200,
+        YOUTUBE_DATA_SOURCE=AnalysisJob.DataSource.SELENIUM,
+    )
+    def test_selenium_analysis_keeps_configured_comment_limit(self, dispatch_fetch):
+        self.client.post(reverse("analyses:start_analysis", args=[self.video_record.id]))
+
+        created_fetch_run = AnalysisJob.objects.get().fetch_runs.get()
+
+        self.assertEqual(created_fetch_run.data_source, AnalysisJob.DataSource.SELENIUM)
+        self.assertEqual(created_fetch_run.maximum_comment_count, 200)
+        dispatch_fetch.assert_called_once_with(fetch_run_id=str(created_fetch_run.id))
 
     @patch("analyses.views.execute_youtube_fetch_run_task.delay", side_effect=RuntimeError("Redis 無法連線"))
     def test_dispatch_failure_is_visible_on_the_job_page(self, dispatch_fetch):

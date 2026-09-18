@@ -133,12 +133,19 @@ def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
     # 去資料庫取剛preview後的相關資料
     video_record = get_object_or_404( Video,id=video_id,)
 
+    # Selenium 需要限制頁面 DOM 與瀏覽器記憶體成長；YouTube API 則完整分頁抓取。
+    maximum_comment_count = (
+        settings.ANALYSIS_MAX_COMMENT_COUNT
+        if settings.YOUTUBE_DATA_SOURCE == AnalysisJob.DataSource.SELENIUM
+        else None
+    )
+
     # 然後將透過preview影片來建立一個等待處理的分析任務。
     created_analysis_job = create_pending_analysis_job_for_video(
         video_record=video_record,
         data_source=settings.YOUTUBE_DATA_SOURCE,
         fetch_options=YouTubeCommentFetchOptions(
-            maximum_comment_count=settings.ANALYSIS_MAX_COMMENT_COUNT,
+            maximum_comment_count=maximum_comment_count,
         ),
     )
 

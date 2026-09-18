@@ -232,7 +232,7 @@ pending → running（抓取）→ awaiting_analysis → running（AI／報告�
 目標：以可替換介面完成 DeepSeek 留言分析、可信來源驗證與頁面 4。
 
 - [x] 選定 DeepSeek 與目前使用模型，API Key 僅由環境變數取得。
-- [x] 第一版將單次抓取與 AI 輸入限制為主留言及回覆合計 200 則，可由 `ANALYSIS_MAX_COMMENT_COUNT` 依主機容量調整。
+- [x] Selenium 單次抓取限制為主留言及回覆合計 200 則，可由 `ANALYSIS_MAX_COMMENT_COUNT` 依主機容量調整；YouTube Data API 則完整分頁抓取可用留言。
 - [x] 定義 Report  Provider 介面與嚴格結構化輸出 Schema。
 - [x] 設計 `AnalysisResult` 模型並建立、審查及套用 migration。
 - [x] 對全量留言建立正規化輸入、Python 精確統計、短引用與 Top 5 排名。

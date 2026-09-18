@@ -63,8 +63,8 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
-# 單次分析抓取的主留言與回覆合計上限。可依部署主機容量調整，
-# t3.micro 預設使用 200，避免 Selenium DOM 與 AI 輸入無限制成長。
+# Selenium 單次抓取的主留言與回覆合計上限。可依部署主機容量調整；
+# YouTube Data API 使用分頁取得全部可用留言，不套用此限制。
 ANALYSIS_MAX_COMMENT_COUNT = get_positive_integer_environment_variable(
     "ANALYSIS_MAX_COMMENT_COUNT",
     200,

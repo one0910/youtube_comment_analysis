@@ -1,6 +1,6 @@
 # TubeSense AI：EC2 Docker 部署
 
-第一版以單台 `t3.micro`、單一 Gunicorn Worker、單一 Celery Worker 與 200 則留言上限運行。主機需要保留 2 GiB Swap；正式環境不啟動 RedisInsight。
+第一版以單台 `t3.micro`、單一 Gunicorn Worker 與單一 Celery Worker 運行。Selenium 備援來源限制為 200 則留言；正式環境使用 YouTube Data API 完整分頁抓取，並保留 2 GiB Swap、不啟動 RedisInsight。
 
 ## 1. 準備環境檔
 
@@ -51,7 +51,7 @@ free -h
 
 再從瀏覽器建立一筆分析，確認留言抓取、AI 分析與報告頁完整成功。
 
-正式環境已移除 Selenium 容器的常駐記憶體成本。`t3.micro` 仍保留 2 GiB Swap，且第一版維持 200 則留言上限與一次一項任務。
+正式環境已移除 Selenium 容器的常駐記憶體成本。`t3.micro` 仍保留 2 GiB Swap 並維持一次一項任務；YouTube Data API 不限制留言數，Selenium 備援來源則維持 200 則上限。
 
 ## 4. 日常操作
 
@@ -75,6 +75,6 @@ df -h
 docker system df
 ```
 
-若經常用滿 2 GiB Swap 或出現 OOM，應先將 `ANALYSIS_MAX_COMMENT_COUNT` 降低，再評估升級主機規格。若 API 回覆 `quotaExceeded`，請到 Google Cloud Console 檢查 YouTube Data API 配額。
+若 Selenium 模式經常用滿 2 GiB Swap 或出現 OOM，應先將 `ANALYSIS_MAX_COMMENT_COUNT` 降低，再評估升級主機規格。YouTube API 模式會完整抓取可用留言；若大型影片造成資料庫、AI 輸入或記憶體壓力，應另外設計 API 模式的取樣策略。若 API 回覆 `quotaExceeded`，請到 Google Cloud Console 檢查 YouTube Data API 配額。
 
 HTTPS、Domain、憑證自動續期與正式安全 Header 會在下一階段加入。
