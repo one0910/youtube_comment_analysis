@@ -5,12 +5,27 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}TubeSense AI{% endblock %}</title>
+    <script>
+      (() => {
+        const storageKey = "tubesense:first-visit-intro:v1";
+
+        try {
+          if (window.localStorage.getItem(storageKey) !== "seen") {
+            document.documentElement.classList.add("tubesense-first-visit");
+          }
+        } catch (error) {
+          // 隱私模式若禁止 localStorage，仍讓網站正常顯示，不阻擋主要內容。
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="{% static 'css/app.css' %}" />
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
     {% block extra_head %}{% endblock %}
   </head>
 
   <body class="min-h-screen bg-app-background font-sans text-brand-navy antialiased">
+    {% include "common/first_visit_intro.html" %}
+
     {# Desktop：固定側邊欄 #}
     <aside
       class="fixed inset-y-0 left-0 z-40 hidden w-[280px] flex-col border-r border-app-border bg-app-surface px-6 py-7 lg:flex"
@@ -155,5 +170,6 @@
     </div>
 
     {% block extra_scripts %}{% endblock %}
+    <script src="{% static 'js/first-visit-intro.js' %}" defer></script>
   </body>
 </html>

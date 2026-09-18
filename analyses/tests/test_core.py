@@ -204,6 +204,8 @@ class OverviewViewTests(TestCase):  # Django 會自動尋找 analyses/tests/ 內
         #確認最後產生的 HTML 包含重要內容。assertContains:確認回傳的 HTML 是否包含指定文字。
         self.assertContains(response, "歡迎回來，創作者！")
         self.assertContains(response, "已分析影片")
+        self.assertContains(response, 'id="first-visit-intro"')
+        self.assertContains(response, "js/first-visit-intro.js")
 
 """新增分析頁面的基本測試。"""
 class NewAnalysisViewTests(TestCase):

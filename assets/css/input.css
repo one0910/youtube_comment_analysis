@@ -15,6 +15,206 @@
         sans-serif;
 }
 
+@keyframes tubesense-first-visit-screen {
+    0%, 90% {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    100% {
+        opacity: 0;
+        visibility: hidden;
+    }
+}
+
+@keyframes tubesense-first-visit-circle {
+    0% {
+        fill-opacity: 0;
+        opacity: 0;
+        stroke-dashoffset: 560;
+    }
+
+    10% { opacity: 1; }
+
+    42% {
+        fill-opacity: 0;
+        stroke-dashoffset: 0;
+    }
+
+    55%, 86% {
+        fill-opacity: 1;
+        opacity: 1;
+        stroke-dashoffset: 0;
+    }
+
+    96%, 100% {
+        fill-opacity: 0;
+        opacity: 0;
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes tubesense-first-visit-play {
+    0%, 12% {
+        fill-opacity: 0;
+        opacity: 0;
+        stroke-dashoffset: 240;
+        transform: scale(0.92);
+    }
+
+    22% { opacity: 1; }
+
+    48% {
+        fill-opacity: 0;
+        stroke-dashoffset: 0;
+        transform: scale(1);
+    }
+
+    60%, 86% {
+        fill-opacity: 1;
+        opacity: 1;
+        stroke-dashoffset: 0;
+        transform: scale(1);
+    }
+
+    96%, 100% {
+        fill-opacity: 0;
+        opacity: 0;
+        stroke-dashoffset: 0;
+        transform: scale(0.95);
+    }
+}
+
+@keyframes tubesense-first-visit-pulse {
+    0%, 48% { transform: scale(1); }
+    58% { transform: scale(1.04); }
+    68%, 88% { transform: scale(1); }
+    100% { transform: scale(0.98); }
+}
+
+@keyframes tubesense-first-visit-reveal {
+    0%, 45% { width: 0; }
+    66%, 88% { width: 460px; }
+    98%, 100% { width: 0; }
+}
+
+@keyframes tubesense-first-visit-text {
+    0%, 45% {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    55% { opacity: 1; }
+
+    66%, 88% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    96%, 100% {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+}
+
+@keyframes tubesense-first-visit-beam {
+    0%, 45% {
+        opacity: 0;
+        transform: translateX(15px);
+    }
+
+    48% { opacity: 1; }
+
+    66% {
+        opacity: 1;
+        transform: translateX(470px);
+    }
+
+    70%, 100% {
+        opacity: 0;
+        transform: translateX(470px);
+    }
+}
+
+@keyframes tubesense-first-visit-tagline {
+    0%, 58% {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    70%, 88% {
+        opacity: 0.9;
+        transform: translateY(0);
+    }
+
+    96%, 100% { opacity: 0; }
+}
+
+.tubesense-first-visit-intro {
+    align-items: center;
+    background: #faf5ff;
+    display: none;
+    inset: 0;
+    justify-content: center;
+    position: fixed;
+    z-index: 100;
+}
+
+.tubesense-first-visit .tubesense-first-visit-intro {
+    animation: tubesense-first-visit-screen 5.4s ease-out both;
+    display: flex;
+}
+
+.tubesense-first-visit-intro__canvas {
+    align-items: center;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    justify-content: center;
+    max-width: 700px;
+    padding: 16px;
+    width: min(100%, 700px);
+}
+
+.tubesense-first-visit-intro__artwork {
+    display: block;
+    height: 100%;
+    overflow: visible;
+    width: 100%;
+}
+
+.tubesense-first-visit-intro__circle {
+    animation: tubesense-first-visit-circle 5.4s cubic-bezier(0.2, 0.8, 0.25, 1) both;
+    stroke-dasharray: 560;
+    transform-origin: 250px 110px;
+}
+
+.tubesense-first-visit-intro__play {
+    animation: tubesense-first-visit-play 5.4s cubic-bezier(0.2, 0.8, 0.25, 1) both;
+    stroke-dasharray: 240;
+    transform-origin: 250px 110px;
+}
+
+.tubesense-first-visit-intro__icon {
+    animation: tubesense-first-visit-pulse 5.4s ease-in-out both;
+    transform-origin: 250px 110px;
+}
+
+.tubesense-first-visit-intro__reveal {
+    animation: tubesense-first-visit-reveal 5.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.tubesense-first-visit-intro__text {
+    animation: tubesense-first-visit-text 5.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.tubesense-first-visit-intro__beam {
+    animation: tubesense-first-visit-beam 5.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.tubesense-first-visit-intro__tagline {
+    animation: tubesense-first-visit-tagline 5.4s ease-out both;
+}
+
 @keyframes tubesense-loading-ring {
     0% {
         opacity: 0.5;
@@ -89,6 +289,40 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .tubesense-first-visit .tubesense-first-visit-intro {
+        animation-duration: 0.6s;
+    }
+
+    .tubesense-first-visit-intro__circle,
+    .tubesense-first-visit-intro__play,
+    .tubesense-first-visit-intro__icon,
+    .tubesense-first-visit-intro__reveal,
+    .tubesense-first-visit-intro__text,
+    .tubesense-first-visit-intro__beam,
+    .tubesense-first-visit-intro__tagline {
+        animation: none;
+    }
+
+    .tubesense-first-visit-intro__circle,
+    .tubesense-first-visit-intro__play {
+        fill-opacity: 1;
+        opacity: 1;
+        stroke-dashoffset: 0;
+    }
+
+    .tubesense-first-visit-intro__reveal {
+        width: 460px;
+    }
+
+    .tubesense-first-visit-intro__text,
+    .tubesense-first-visit-intro__tagline {
+        opacity: 1;
+    }
+
+    .tubesense-first-visit-intro__beam {
+        display: none;
+    }
+
     .tubesense-loading-ring::before,
     .tubesense-loading-dot,
     .tubesense-loading-progress {
