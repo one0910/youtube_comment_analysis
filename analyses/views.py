@@ -132,14 +132,16 @@ def new_analysis(request: HttpRequest) -> HttpResponse:
 def start_analysis(request: HttpRequest,video_id: int) -> HttpResponse:
     # 去資料庫取剛preview後的相關資料
     video_record = get_object_or_404( Video,id=video_id,)
+
     # 然後將透過preview影片來建立一個等待處理的分析任務。
     created_analysis_job = create_pending_analysis_job_for_video(
         video_record=video_record,
         data_source=settings.YOUTUBE_DATA_SOURCE,
         fetch_options=YouTubeCommentFetchOptions(
-            maximum_comment_count=None,
+            maximum_comment_count=settings.ANALYSIS_MAX_COMMENT_COUNT,
         ),
     )
+
     # created_analysis_job.fetch_run可以取得AnalysisJob的資料。透過反向關聯，找出剛才建立的第一次 FetchRun
     fetch_run = created_analysis_job.fetch_runs.get(attempt_number=1)
 
