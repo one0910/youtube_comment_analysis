@@ -7,7 +7,7 @@ from analyses.providers.youtube_provider import (
     YouTubeCommentSortOrder,
     YouTubeProvider,
 )
-from .provider_factory import (
+from .provider_creater import (
     YouTubeProviderUnavailableError,
     create_youtube_provider,
 )

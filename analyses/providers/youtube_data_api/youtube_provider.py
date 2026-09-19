@@ -82,13 +82,9 @@ class YouTubeDataAPIProvider(YouTubeProvider):
                 message="無法連線到 YouTube Data API。",
             ) from None
 
+    # 
     def get_video_preview(self, youtube_video_id: str) -> YouTubeVideoPreviewData:
-        payload = self._request_json(
-            "videos",
-            part="snippet,statistics",
-            id=youtube_video_id,
-            maxResults=1,
-        )
+        payload = self._request_json("videos", part="snippet,statistics",id=youtube_video_id,maxResults=1)
         items = payload.get("items") or []
         if not items:
             raise YouTubeVideoUnavailableError(

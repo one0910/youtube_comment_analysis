@@ -10,6 +10,7 @@ def create_pending_analysis_job_for_video(
     data_source: str = AnalysisJob.DataSource.SELENIUM, #用什麼工具抓？ 預設是selenium
     fetch_options: YouTubeCommentFetchOptions | None = None, #fetch_options是用來配置留言抓取的機制，例如用什麼順序抓留言、是否抓回覆、最多抓幾則
 ) -> AnalysisJob:
+
     fetch_options = fetch_options or YouTubeCommentFetchOptions()
 
     # 建立一個整份分析的工作單。也就是我要分析這支影片，請先幫我建立一張工作單，記錄這份分析的進度。

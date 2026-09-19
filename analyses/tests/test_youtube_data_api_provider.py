@@ -11,7 +11,7 @@ from analyses.providers.youtube_provider import (
     YouTubeCommentSortOrder,
     YouTubeVideoUnavailableError,
 )
-from analyses.services.youtube.provider_factory import (
+from analyses.services.youtube.provider_creater import (
     YouTubeProviderUnavailableError,
     create_youtube_provider,
 )
@@ -169,7 +169,7 @@ class YouTubeProviderFactoryTests(SimpleTestCase):
         with self.assertRaisesRegex(ImproperlyConfigured, "YOUTUBE_API_KEY"):
             YouTubeDataAPIProvider()
 
-    @patch("analyses.services.youtube.provider_factory.SeleniumYouTubeProvider")
+    @patch("analyses.services.youtube.provider_creater.SeleniumYouTubeProvider")
     def test_factory_keeps_selenium_available_for_local_development(self, provider_class):
         provider = create_youtube_provider(AnalysisJob.DataSource.SELENIUM)
         self.assertIs(provider, provider_class.return_value)
