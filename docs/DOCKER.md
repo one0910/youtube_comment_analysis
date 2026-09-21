@@ -26,7 +26,7 @@ Web 與 Worker 使用同一個 Python image；Selenium 使用官方 Standalone C
 
 應顯示 `True`，Compose 會將它傳給 Worker。不要把金鑰寫進 Compose 或 Git。
 
-另外建議複製 `.env.docker.example` 為 `.env.docker`，填入：
+另外建議複製 `.env.development.example` 為 `.env.development`，填入：
 
 ```dotenv
 DJANGO_SECRET_KEY=一段夠長的隨機內容
@@ -34,7 +34,7 @@ DJANGO_DEBUG=false
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 ```
 
-`.env.docker` 已排除 Git。不要將正式 Secret Key 填入 `.env.docker.example`。
+`.env.development` 已排除 Git。不要將正式 Secret Key 填入 `.env.development.example`。
 
 啟動並建立 image：
 

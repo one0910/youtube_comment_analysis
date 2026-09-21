@@ -138,7 +138,7 @@ python manage.py runserver
 
 ### 使用 Docker 啟動完整服務
 
-先確認 PowerShell 能讀取 `DEEPSEEK_API_KEY`。可選擇從 `.env.docker.example` 建立不提交 Git 的 `.env.docker`，設定隨機的 `DJANGO_SECRET_KEY`。接著執行：
+先確認 PowerShell 能讀取 `DEEPSEEK_API_KEY`。可選擇從 `.env.development.example` 建立不提交 Git 的 `.env.development`，設定隨機的 `DJANGO_SECRET_KEY`。接著執行：
 
 ```powershell
 docker compose up -d --build

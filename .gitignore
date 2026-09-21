@@ -5,7 +5,7 @@ __pycache__/
 db.sqlite3
 .env
 .env.postgres
-.env.docker
+.env.development
 .env.production
 staticfiles/
 media/

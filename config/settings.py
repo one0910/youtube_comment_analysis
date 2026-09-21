@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 本機共用 Docker 的連線設定；部署環境變數優先，不覆蓋既有值。
 load_dotenv(BASE_DIR / ".env.postgres", override=False)
-load_dotenv(BASE_DIR / ".env.docker", override=False)
+load_dotenv(BASE_DIR / ".env.development", override=False)
 
 
 def get_boolean_environment_variable(name: str, default: bool) -> bool:
