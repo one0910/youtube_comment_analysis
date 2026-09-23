@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: tubesense_ci
+          POSTGRES_USER: tubesense_ci
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tubesense_ci -d tubesense_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DJANGO_SECRET_KEY: ci-only-django-secret-key-not-used-in-production
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      DATABASE_ENGINE: postgresql
+      POSTGRES_DB: tubesense_ci
+      POSTGRES_USER: tubesense_ci
+      POSTGRES_PASSWORD: ci-only-password
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/0
+      YOUTUBE_DATA_SOURCE: selenium
+      DEEPSEEK_API_KEY: ci-only-key
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tailwind CSS
+        run: npm run css:build
+
+      - name: Check Django configuration
+        run: python manage.py check
+
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run Django tests
+        run: python manage.py test analyses -v 1

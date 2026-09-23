@@ -1,5 +1,7 @@
 # TubeSense AI：EC2 Docker 部署
 
+GitHub Actions 自動部署的 IAM、OIDC 和 SSM 設定見 [GITHUB_ACTIONS_DEPLOYMENT.md](GITHUB_ACTIONS_DEPLOYMENT.md)。
+
 第一版以單台 `t3.micro`、單一 Gunicorn Worker 與單一 Celery Worker 運行。Selenium 備援來源限制為 200 則留言；正式環境使用 YouTube Data API 完整分頁抓取，並保留 2 GiB Swap、不啟動 RedisInsight。
 
 ## 1. 準備環境檔
