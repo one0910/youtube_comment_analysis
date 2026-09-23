@@ -83,13 +83,13 @@ id -nG ubuntu
 
 ## 4. 執行方式
 
-將 `.github/workflows/ci.yml`、`.github/workflows/deploy.yml` 和 `scripts/git_update_script.sh` 提交並 push 到 `main` 後：
+將 `.github/workflows/ci.yml`、`.github/workflows/cd(deploy).yml` 和 `scripts/git_update_script.sh` 提交並 push 到 `main` 後：
 
 1. CI 安裝相依套件、編譯 CSS、檢查 Django 設定與 migration，並執行測試；GitHub 不建置 Docker Image。
-2. CI 成功且事件是同一 repository 的 `main` push 時，Deploy production workflow 使用 OIDC 暫時扮演 `TubeSenseGitHubDeployRole`。
+2. `CI階段` 成功且事件是同一 repository 的 `main` push 時，`CD階段` workflow 使用 OIDC 暫時扮演 `TubeSenseGitHubDeployRole`。
 3. SSM 在指定 EC2 執行 `git pull --ff-only origin main`，以該次 CI 通過的 SHA 做比對。若 main 已往前移，較舊執行會略過。
 4. 在 EC2 建置 Image，更新 web、worker、nginx；重新啟動 nginx 以刷新 upstream DNS；確認健康狀態。
 
-SSM Run Command 可在 AWS Systems Manager → 執行命令查看。GitHub Actions 的 Deploy production 頁面也會顯示 SSM Command ID、執行狀態與有限長度的 stdout/stderr。部署失敗時不會執行 `docker compose down` 或刪除 volumes；若失敗發生於服務更新之後，需依 log 檢查並人工處理。
+SSM Run Command 可在 AWS Systems Manager → 執行命令查看。GitHub Actions 的 `CD階段` 頁面也會顯示 SSM Command ID、執行狀態與有限長度的 stdout/stderr。部署失敗時不會執行 `docker compose down` 或刪除 volumes；若失敗發生於服務更新之後，需依 log 檢查並人工處理。
 
 此主機只有約 1 GiB 記憶體，Image 建置時應留意 `free -h`、swap 和 Docker 日誌。未來若建置造成主機壓力，可改成 GitHub 建置 Image 並推送 ECR；OIDC 與 SSM 的身分和遠端命令設計仍可沿用。

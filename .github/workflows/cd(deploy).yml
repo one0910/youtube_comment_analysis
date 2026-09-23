@@ -1,8 +1,8 @@
-name: Deploy production
+name: CD階段
 
 on:
   workflow_run:
-    workflows: [CI]
+    workflows: [CI階段]
     types: [completed]
     branches: [main]
 
