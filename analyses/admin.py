@@ -1,5 +1,9 @@
+import json
+
 from django.contrib import admin
-from .models import AnalysisJob, Comment, CommentSnapshot, FetchRun, Video
+from django.utils.html import format_html
+
+from .models import AnalysisJob, AnalysisResult, Comment, CommentSnapshot, FetchRun, Video
 
 
 @admin.register(Video)
@@ -205,3 +209,82 @@ class CommentSnapshotAdmin(admin.ModelAdmin):
     ordering = (
         "-snapshot_at",
     )
+
+
+@admin.register(AnalysisResult)
+class AnalysisResultAdmin(admin.ModelAdmin):
+    """可搜尋及檢視已保存的 AI 報告，不允許在管理頁改寫來源結果。"""
+
+    list_display = (
+        "video_title",
+        "attempt_number",
+        "provider_name",
+        "model_name",
+        "analysis_mode",
+        "analyzed_comment_count",
+        "created_at",
+    )
+    list_filter = (
+        "provider_name",
+        "analysis_mode",
+        "created_at",
+    )
+    search_fields = (
+        "analysis_job__video__youtube_video_id",
+        "analysis_job__video__video_title",
+        "model_name",
+    )
+    readonly_fields = (
+        "id",
+        "analysis_job",
+        "source_fetch_run",
+        "attempt_number",
+        "provider_name",
+        "model_name",
+        "prompt_version",
+        "schema_version",
+        "analysis_mode",
+        "analyzed_comment_count",
+        "main_comment_count",
+        "reply_comment_count",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "created_at",
+        "updated_at",
+        "formatted_result_data",
+    )
+    fieldsets = (
+        ("報告來源", {"fields": (
+            "id", "analysis_job", "source_fetch_run", "attempt_number",
+            "provider_name", "model_name", "prompt_version", "schema_version", "analysis_mode",
+        )}),
+        ("分析規模與用量", {"fields": (
+            "analyzed_comment_count", "main_comment_count", "reply_comment_count",
+            "prompt_tokens", "completion_tokens", "total_tokens", "created_at", "updated_at",
+        )}),
+        ("報告內容（唯讀）", {"fields": ("formatted_result_data",)}),
+    )
+    list_select_related = ("analysis_job__video", "source_fetch_run")
+    ordering = ("-created_at",)
+
+    @admin.display(description="影片", ordering="analysis_job__video__video_title")
+    def video_title(self, result):
+        return result.analysis_job.video.video_title
+
+    @admin.display(description="結構化報告 JSON")
+    def formatted_result_data(self, result):
+        content = json.dumps(result.result_data, ensure_ascii=False, indent=2)
+        return format_html(
+            '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:38rem;overflow-y:auto">{}</pre>',
+            content,
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
