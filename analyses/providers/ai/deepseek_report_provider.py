@@ -270,6 +270,7 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
 
     behavior_ids = {i for g in (*facts.repeated_text_groups, *facts.display_name_activity) for i in g.comment_ids}
     sections = {}
+    omitted_behavior_insights = 0
     for section in ("behavior_insights", "conclusions"):
         items = []
         for item in _list(payload[section]):
@@ -277,13 +278,17 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
             ids = resolve_refs(item["evidence_comment_refs"])
             if (section == "behavior_insights" and facts.sample.analysis_mode != "small"
                     and not set(ids).issubset(behavior_ids)):
-                raise ValueError("行為解讀必須引用 Python 統計群組內的留言。")
+                # 只捨棄這項沒有統計依據的行為觀察；其他報告欄位仍須通過完整驗證。
+                omitted_behavior_insights += 1
+                continue
             items.append(ReportInsight(item["title"], item["description"], ids))
         sections[section] = tuple(items)
 
     limitations = ["本次分析僅涵蓋送入的留言樣本，不代表整個留言區或整體民意。"]
     if facts.sample.analysis_mode != "small":
         limitations.append("情緒比例為整批 AI 估計，非逐則分類統計，不換算成留言筆數。")
+    if omitted_behavior_insights:
+        limitations.append(f"有 {omitted_behavior_insights} 項行為觀察的引用不屬於本次統計群組，已略過。")
 
     if facts.unresolved_thread_comment_ids:
         limitations.append(f"有 {len(facts.unresolved_thread_comment_ids)} 則留言無法確認根討論串，未納入討論串活躍統計。")
@@ -304,6 +309,8 @@ def _assemble_report(payload: dict, facts: PreparedReportFacts, provenance: Repo
     report = replace_report_comment_refs_with_author_names(report, facts)
     report = apply_report_sample_scope(report)
     validate_report_source_facts(report, facts)
+    if omitted_behavior_insights:
+        logger.warning("已略過 %s 項引用群組外留言的行為觀察。", omitted_behavior_insights)
     return report
 
 

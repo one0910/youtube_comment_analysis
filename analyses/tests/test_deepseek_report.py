@@ -238,11 +238,25 @@ class DeepSeekReportTests(SimpleTestCase):
         with self.assertRaises(DeepSeekResponseError):
             self.parse({**self.payload, "sentiment": sentiment}, self.medium_facts())
 
-    def test_behavior_cannot_be_invented_when_program_groups_are_empty(self):
+    def test_behavior_without_program_groups_is_omitted_without_losing_report(self):
         item = {"title": "重複發言", "description": "聲稱重複", "evidence_comment_refs": ["c1"]}
-        with self.assertRaises(DeepSeekResponseError):
-            self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]},
-                       self.medium_facts())
+        report = self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]},
+                            self.medium_facts())
+        self.assertEqual(report.behavior_insights, ())
+        self.assertEqual(len(report.topics), 1)
+        self.assertEqual(len(report.conclusions), 1)
+        self.assertTrue(any("已略過" in limitation for limitation in report.limitations))
+
+    def test_unsupported_behavior_does_not_retry_an_otherwise_valid_api_response(self):
+        item = {"title": "沒有統計依據", "description": "不應保留", "evidence_comment_refs": ["c1"]}
+        content = json.dumps({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]})
+        client = self.make_client(content=content)
+
+        report = self.analyze(client, self.medium_facts().request)
+
+        self.assertEqual(report.behavior_insights, ())
+        self.assertEqual(len(report.topics), 1)
+        client.chat.completions.create.assert_called_once()
 
     def test_program_groups_restored_and_behavior_refs_validated(self):
         comments = (self.comments[0], replace(self.comments[1], comment_text=self.comments[0].comment_text)) + self.comments[2:]
@@ -250,9 +264,19 @@ class DeepSeekReportTests(SimpleTestCase):
         item = {"title": "相同文字", "description": "兩個顯示名稱使用相同文字。", "evidence_comment_refs": ["c1", "c2"]}
         report = self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]}, facts)
         self.assertEqual(report.repeated_text_groups[0].occurrence_count, 2)
-        item["evidence_comment_refs"] = ["c3"]
+        self.assertEqual(report.behavior_insights[0].evidence_comment_ids, ("original-0", "original-1"))
+        unsupported = {**item, "title": "無統計依據", "evidence_comment_refs": ["c3"]}
+        mixed = self.parse({**self.payload, "sentiment": self.sentiment(),
+                            "behavior_insights": [item, unsupported]}, facts)
+        self.assertEqual(len(mixed.behavior_insights), 1)
+        self.assertEqual(mixed.behavior_insights[0].title, "相同文字")
+        self.assertTrue(any("1 項行為觀察" in limitation for limitation in mixed.limitations))
+
+    def test_unknown_behavior_refs_remain_invalid(self):
+        item = {"title": "無效引用", "description": "不存在的留言", "evidence_comment_refs": ["c999"]}
         with self.assertRaises(DeepSeekResponseError):
-            self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]}, facts)
+            self.parse({**self.payload, "sentiment": self.sentiment(), "behavior_insights": [item]},
+                       self.medium_facts())
 
     def test_conclusions_and_behavior_require_evidence(self):
         for section in ("conclusions", "behavior_insights"):
