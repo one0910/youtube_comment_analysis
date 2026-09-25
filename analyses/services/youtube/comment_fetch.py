@@ -1,3 +1,5 @@
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -7,6 +9,8 @@ from analyses.providers.youtube_provider import (
     YouTubeCommentFetchOptions,
     YouTubeProvider,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class YouTubeCommentVideoMismatchError(ValueError):
@@ -26,6 +30,7 @@ def fetch_and_store_youtube_comments(
     analysis_job = fetch_run.analysis_job
     video_record = fetch_run.analysis_job.video
     processed_youtube_comment_ids: set[str] = set()
+    skipped_youtube_comment_ids: set[str] = set()
 
     try:
         # 呼叫 Provider 的 get_video_comments()，selenium逐筆取得留言資料
@@ -39,7 +44,18 @@ def fetch_and_store_youtube_comments(
 
             # Provider 可能因捲動或分頁邊界重複回傳同一則留言，
             # 同一次抓取只保存第一次出現的資料。
-            if (single_comment_data.youtube_comment_id in processed_youtube_comment_ids):
+            if (single_comment_data.youtube_comment_id in processed_youtube_comment_ids
+                    or single_comment_data.youtube_comment_id in skipped_youtube_comment_ids):
+                continue
+
+            # API 偶爾回傳沒有文字的留言；不能把它算入有效樣本或送入 AI。
+            if not single_comment_data.comment_text.strip():
+                skipped_youtube_comment_ids.add(single_comment_data.youtube_comment_id)
+                logger.warning(
+                    "略過空白 YouTube 留言：fetch_run_id=%s youtube_comment_id=%s",
+                    fetch_run.id,
+                    single_comment_data.youtube_comment_id,
+                )
                 continue
 
             _save_comment_and_snapshot(

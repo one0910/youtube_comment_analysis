@@ -1,8 +1,12 @@
+import logging
+
 from analyses.models import FetchRun
 from analyses.providers.ai_analysis_request import (
     AIAnalysisRequest,
     AICommentInput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 """指定的 FetchRun 尚無法提供 AI 分析資料。"""
@@ -24,6 +28,20 @@ def build_ai_analysis_request_from_fetch_run(fetch_run: FetchRun) -> AIAnalysisR
     if not comment_snapshots:
         raise AIAnalysisInputUnavailableError("找不到可供 AI 分析的留言快照。")
 
+    valid_snapshots = []
+    for comment_snapshot in comment_snapshots:
+        if not comment_snapshot.snapshot_comment_text.strip():
+            logger.warning(
+                "略過歷史空白留言快照：fetch_run_id=%s youtube_comment_id=%s",
+                fetch_run.id,
+                comment_snapshot.comment.youtube_comment_id,
+            )
+            continue
+        valid_snapshots.append(comment_snapshot)
+
+    if not valid_snapshots:
+        raise AIAnalysisInputUnavailableError("找不到可供 AI 分析的非空白留言快照。")
+
     comment_inputs = tuple(
         AICommentInput(
             sequence=comment_sequence,
@@ -35,7 +53,7 @@ def build_ai_analysis_request_from_fetch_run(fetch_run: FetchRun) -> AIAnalysisR
             published_time_text=(comment_snapshot.snapshot_published_time_text),
             is_pinned=(comment_snapshot.snapshot_is_pinned),
         )
-        for comment_sequence, comment_snapshot in enumerate( comment_snapshots,start=1)
+        for comment_sequence, comment_snapshot in enumerate(valid_snapshots, start=1)
     )
 
     video_record = fetch_run.analysis_job.video

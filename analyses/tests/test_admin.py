@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from analyses.models import AnalysisJob, AnalysisResult, FetchRun, Video
+from analyses.models import AnalysisJob, AnalysisResult, Comment, CommentSnapshot, FetchRun, Video
 
 
 class AnalysisResultAdminTests(TestCase):
@@ -11,12 +11,20 @@ class AnalysisResultAdminTests(TestCase):
             username="report-admin", email="admin@example.com", password="test-password"
         )
         self.client.force_login(user)
-        video = Video.objects.create(youtube_video_id="testvideo01", video_title="測試報告影片")
-        job = AnalysisJob.objects.create(video=video)
-        fetch_run = FetchRun.objects.create(analysis_job=job, data_source=AnalysisJob.DataSource.YOUTUBE_API)
+        self.video = Video.objects.create(youtube_video_id="testvideo01", video_title="測試報告影片")
+        self.job = AnalysisJob.objects.create(video=self.video)
+        self.fetch_run = FetchRun.objects.create(
+            analysis_job=self.job, data_source=AnalysisJob.DataSource.YOUTUBE_API
+        )
+        self.comment = Comment.objects.create(
+            video=self.video, youtube_comment_id="test-comment-01", comment_text="測試留言"
+        )
+        self.snapshot = CommentSnapshot.objects.create(
+            fetch_run=self.fetch_run, comment=self.comment, snapshot_comment_text="測試留言"
+        )
         self.result = AnalysisResult.objects.create(
-            analysis_job=job,
-            source_fetch_run=fetch_run,
+            analysis_job=self.job,
+            source_fetch_run=self.fetch_run,
             provider_name="deepseek",
             model_name="test-model",
             prompt_version="test-prompt",
@@ -57,3 +65,64 @@ class AnalysisResultAdminTests(TestCase):
 
         self.assertEqual(self.client.get(add_url).status_code, 403)
         self.assertEqual(self.client.get(delete_url).status_code, 403)
+
+    def test_deleting_video_cascades_to_job_comments_snapshots_and_report(self):
+        url = reverse("admin:analyses_video_changelist")
+        selection = {"action": "delete_selected", "_selected_action": [str(self.video.pk)]}
+
+        preview = self.client.post(url, selection)
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, "AI 分析結果")
+        self.assertNotContains(preview, "無法刪除")
+
+        confirmed = self.client.post(url, {**selection, "post": "yes"})
+        self.assertEqual(confirmed.status_code, 302)
+        self.assertFalse(Video.objects.filter(pk=self.video.pk).exists())
+        self.assertFalse(AnalysisJob.objects.filter(pk=self.job.pk).exists())
+        self.assertFalse(FetchRun.objects.filter(pk=self.fetch_run.pk).exists())
+        self.assertFalse(Comment.objects.filter(pk=self.comment.pk).exists())
+        self.assertFalse(CommentSnapshot.objects.filter(pk=self.snapshot.pk).exists())
+        self.assertFalse(AnalysisResult.objects.filter(pk=self.result.pk).exists())
+
+    def test_deleting_job_cascades_to_fetch_run_snapshot_and_report_but_keeps_video_comment(self):
+        url = reverse("admin:analyses_analysisjob_changelist")
+        selection = {"action": "delete_selected", "_selected_action": [str(self.job.pk)]}
+
+        preview = self.client.post(url, selection)
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, "AI 分析結果")
+        self.assertNotContains(preview, "無法刪除")
+
+        confirmed = self.client.post(url, {**selection, "post": "yes"})
+        self.assertEqual(confirmed.status_code, 302)
+        self.assertTrue(Video.objects.filter(pk=self.video.pk).exists())
+        self.assertTrue(Comment.objects.filter(pk=self.comment.pk).exists())
+        self.assertFalse(AnalysisJob.objects.filter(pk=self.job.pk).exists())
+        self.assertFalse(FetchRun.objects.filter(pk=self.fetch_run.pk).exists())
+        self.assertFalse(CommentSnapshot.objects.filter(pk=self.snapshot.pk).exists())
+        self.assertFalse(AnalysisResult.objects.filter(pk=self.result.pk).exists())
+
+    def test_single_video_delete_is_allowed_with_related_report(self):
+        url = reverse("admin:analyses_video_delete", args=[self.video.pk])
+
+        preview = self.client.get(url)
+        self.assertEqual(preview.status_code, 200)
+        self.assertNotContains(preview, "無法刪除")
+
+        confirmed = self.client.post(url, {"post": "yes"})
+        self.assertEqual(confirmed.status_code, 302)
+        self.assertFalse(Video.objects.filter(pk=self.video.pk).exists())
+        self.assertFalse(AnalysisResult.objects.filter(pk=self.result.pk).exists())
+
+    def test_single_job_delete_is_allowed_with_related_report(self):
+        url = reverse("admin:analyses_analysisjob_delete", args=[self.job.pk])
+
+        preview = self.client.get(url)
+        self.assertEqual(preview.status_code, 200)
+        self.assertNotContains(preview, "無法刪除")
+
+        confirmed = self.client.post(url, {"post": "yes"})
+        self.assertEqual(confirmed.status_code, 302)
+        self.assertTrue(Video.objects.filter(pk=self.video.pk).exists())
+        self.assertFalse(AnalysisJob.objects.filter(pk=self.job.pk).exists())
+        self.assertFalse(AnalysisResult.objects.filter(pk=self.result.pk).exists())

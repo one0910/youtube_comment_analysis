@@ -2229,6 +2229,30 @@ class YouTubeFetchServiceTests(TestCase):
         self.assertEqual(reply_comment.parent_youtube_comment_id, "UgzParent123")
         self.assertEqual(reply_comment.parent_comment, parent_comment)
 
+    def test_blank_comments_are_logged_and_not_counted_or_stored(self):
+        blank_comment = YouTubeCommentData(
+            youtube_comment_id="UgzBlank123",
+            youtube_video_id=self.youtube_video_id,
+            comment_text="  \n ",
+        )
+        provider = FakeYouTubeProvider(
+            video_preview_data=self.video_preview_data,
+            comment_data=[self.parent_comment_data, blank_comment, blank_comment, self.newest_comment_data],
+        )
+
+        with self.assertLogs("analyses.services.youtube.comment_fetch", level="WARNING") as logs:
+            count = fetch_and_store_youtube_comments(fetch_run=self.fetch_run, youtube_provider=provider)
+
+        self.fetch_run.refresh_from_db()
+        self.assertEqual(count, 2)
+        self.assertEqual(self.fetch_run.fetched_comment_count, 2)
+        self.assertEqual(Comment.objects.count(), 2)
+        self.assertEqual(CommentSnapshot.objects.count(), 2)
+        self.assertFalse(Comment.objects.filter(youtube_comment_id="UgzBlank123").exists())
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn("UgzBlank123", logs.output[0])
+        self.assertIn(str(self.fetch_run.id), logs.output[0])
+
     def test_fetch_progress_is_saved_after_each_unique_comment(self):
         """Selenium 尚未抓完時，其他請求也應能讀到逐步增加的留言數。"""
         snapshot_progress = []
@@ -2597,6 +2621,31 @@ class AIAnalysisRequestServiceTests(TestCase):
         self.assertEqual(analysis_request.comment_count, 1)
         self.assertEqual(analysis_request.comments[0].comment_text, "第二次抓取內容")
         self.assertEqual(analysis_request.comments[0].like_count, 120)
+
+    def test_historical_blank_snapshot_is_logged_and_excluded(self):
+        CommentSnapshot.objects.filter(fetch_run=self.fetch_run, comment=self.parent_comment).update(
+            snapshot_comment_text=" \n "
+        )
+
+        with self.assertLogs("analyses.services.ai.analysis_request", level="WARNING") as logs:
+            analysis_request = build_ai_analysis_request_from_fetch_run(fetch_run=self.fetch_run)
+
+        self.assertEqual(analysis_request.comment_count, 1)
+        self.assertEqual(analysis_request.comments[0].sequence, 1)
+        self.assertEqual(analysis_request.comments[0].youtube_comment_id, self.reply_comment.youtube_comment_id)
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn(self.parent_comment.youtube_comment_id, logs.output[0])
+        self.assertIn(str(self.fetch_run.id), logs.output[0])
+
+    def test_all_historical_blank_snapshots_are_rejected(self):
+        CommentSnapshot.objects.filter(fetch_run=self.fetch_run).update(snapshot_comment_text="")
+
+        with self.assertLogs("analyses.services.ai.analysis_request", level="WARNING"):
+            with self.assertRaisesMessage(
+                AIAnalysisInputUnavailableError,
+                "找不到可供 AI 分析的非空白留言快照。",
+            ):
+                build_ai_analysis_request_from_fetch_run(fetch_run=self.fetch_run)
 
     def test_pending_fetch_run_cannot_be_used_for_ai_analysis(self):
         self.fetch_run.status = FetchRun.Status.PENDING

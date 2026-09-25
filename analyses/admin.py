@@ -6,8 +6,17 @@ from django.utils.html import format_html
 from .models import AnalysisJob, AnalysisResult, Comment, CommentSnapshot, FetchRun, Video
 
 
+class AllowReportCascadeDeletionMixin:
+    """父物件刪除時允許連帶移除報告，但報告管理頁仍不可單獨刪除。"""
+
+    def get_deleted_objects(self, objs, request):
+        deleted_objects, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+        perms_needed.discard(AnalysisResult._meta.verbose_name)
+        return deleted_objects, model_count, perms_needed, protected
+
+
 @admin.register(Video)
-class VideoAdmin(admin.ModelAdmin):
+class VideoAdmin(AllowReportCascadeDeletionMixin, admin.ModelAdmin):
     """設定影片資料在 Django Admin 裡的顯示方式。"""
 
     list_display = (
@@ -34,7 +43,7 @@ class VideoAdmin(admin.ModelAdmin):
 
 
 @admin.register(AnalysisJob)
-class AnalysisJobAdmin(admin.ModelAdmin):
+class AnalysisJobAdmin(AllowReportCascadeDeletionMixin, admin.ModelAdmin):
     """設定分析任務在 Django Admin 裡的顯示方式。"""
 
     list_display = (
